@@ -1,0 +1,20 @@
+[package]
+name = "EdgeCut"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+nalgebra="0.32"
+rand="0.8"
+approx = "0.5"
+num-traits = "0.2.19"
+rayon = "1.11.0"
+sprs = "0.11"
+forceatlas2 = "0.6.1"
+itertools = "0.14.0"
+tracing = { version = "0.1", default-features = false, features = ["std"] }
+
+
+[dev-dependencies]
+tempfile = "3.21.0"
+proptest = { version = "1", default-features = false, features = ["std", "timeout"] }
