@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::path::Path;
 use sprs::io::read_matrix_market;
 use sprs::{TriMatI};
@@ -39,6 +40,15 @@ pub fn read_matrix_market_as_graph(file_path: &Path) -> Graph{
             }
         }
     }
+}
+
+/// Write the partition array to a file.
+pub fn write_partition_data_to_file(partition: &[usize], file_name: &str) -> Result<(), std::io::Error> {
+    let mut file = File::create(file_name)?;
+    for vertex_id in 0..partition.len() {
+        writeln!(file, "vertex {} => partition {}", vertex_id, partition[vertex_id])?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
