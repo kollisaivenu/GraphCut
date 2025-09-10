@@ -1,5 +1,6 @@
 use std::fs::File;
 use std::path::Path;
+use std::io::Write;
 use sprs::io::read_matrix_market;
 use sprs::{TriMatI};
 use crate::graph::Graph;
