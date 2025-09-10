@@ -1,3 +1,4 @@
+// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
 use itertools::Itertools;
 use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;

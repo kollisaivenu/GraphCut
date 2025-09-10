@@ -1,3 +1,4 @@
+// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
 use std::fmt;
 
 mod jet_refiner;

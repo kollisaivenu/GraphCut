@@ -1,3 +1,4 @@
+// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
 // # Recursive Coordinate Bisection algorithm
 //
 // Partitions a mesh based on the nodes coordinates and corresponding weights.

@@ -58,7 +58,7 @@ mod tests {
     use std::io::Write;
     use std::path::Path;
     use tempfile::tempdir;
-    use crate::input::read_matrix_market_as_graph;
+    use crate::io::read_matrix_market_as_graph;
 
     fn create_mock_file(dir: &Path, filename: &str, content: &str) -> String {
         let file_path = dir.join(filename);

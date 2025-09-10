@@ -230,39 +230,24 @@ fn convert_graph_to_coordinates(graph: &Graph, weights: Vec<f64>, iter:u32) -> V
 /// # Example
 ///
 /// ```rust
-/// # fn main() -> Result<(), EdgeCut::algorithms::Error> {
-/// use std::env;
 /// use std::path::Path;
-/// use rand::{thread_rng, Rng};
-/// use sprs::{io, CsMat, TriMat};
+/// use GraphCut::io::{read_matrix_market_as_graph, write_partition_data_to_file};
+/// use GraphCut::gen_weights::gen_random_weights;
+/// use GraphCut::algorithms::MultiLevelPartitioner;
+/// use GraphCut::imbalance::imbalance;
+/// use GraphCut::Partition;
+/// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
-/// use EdgeCut::algorithms::MultiLevelPartitioner;
-/// use EdgeCut::Partition;
-/// use EdgeCut::imbalance::imbalance;
-/// use EdgeCut::io::read_matrix_market_as_graph;
-/// use EdgeCut::gen_weights::gen_random_weights;
-/// let mut current_dir = env::current_dir().expect("Failed to get current directory");
-/// let file_path = current_dir.join(Path::new("testdata/vt2010.mtx"));
+///     let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
+///     let weights = gen_random_weights(graph.len(), 1.0, 3.0);
+///     let mut partition = vec![0; graph.len()];
 ///
-/// let graph = read_matrix_market_as_graph(&file_path);
+///     MultiLevelPartitioner {..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
 ///
-/// let mut rng = thread_rng();
-/// let weights = gen_random_weights(graph.len(), 1.0, 3.0);
-///
-/// let mut partition = vec![0; graph.len()];
-/// MultiLevelPartitioner {..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
-/// let edge_cut = graph.edge_cut(&partition);
-///
-/// // Note: The edge cut is not theoretically guaranteed to lie between 20,000,000 and 30,000,000.
-/// // However, experiments consistently produced values within this range, so the following assertion
-/// // is used as a practical check.
-///
-///
-///
-/// Ok(())
+///     let edge_cut = graph.edge_cut(&partition);
+///     Ok(())
 /// }
 /// ```
-///
 
 #[derive(Debug, Clone, Copy)]
 pub struct MultiLevelPartitioner {
