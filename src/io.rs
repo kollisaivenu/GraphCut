@@ -7,6 +7,11 @@ use crate::graph::Graph;
 
 /// Read a matrix market file and output Graph struct.
 pub fn read_matrix_market_as_graph(file_path: &Path) -> Graph{
+    // Check if file exists
+    if !file_path.exists() {
+        panic!("The matrix market file {} does not exist.", file_path.display());
+    }
+
     // Attempt to read the matrix market file as a TriMat with edge lengths as f64.
     let tri_matrix_f64: Result<TriMatI<f64, usize>, _> = read_matrix_market(file_path);
 
@@ -95,7 +100,7 @@ mod tests {
         let temp_dir = tempdir()?;
 
         let f64_content = "\
-                                %%MatrixMarket matrix coordinate real general
+                                %%MatrixMarket matrix coordinate integer general
                                 %
                                 5 5 3
                                 1 1 1.0
