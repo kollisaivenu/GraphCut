@@ -239,7 +239,7 @@ fn convert_graph_to_coordinates(graph: &Graph, weights: Vec<f64>, iter:u32) -> V
 /// use EdgeCut::algorithms::MultiLevelPartitioner;
 /// use EdgeCut::Partition;
 /// use EdgeCut::imbalance::imbalance;
-/// use EdgeCut::input::read_matrix_market_as_graph;
+/// use EdgeCut::io::read_matrix_market_as_graph;
 /// use EdgeCut::gen_weights::gen_random_weights;
 /// let mut current_dir = env::current_dir().expect("Failed to get current directory");
 /// let file_path = current_dir.join(Path::new("testdata/vt2010.mtx"));

@@ -1,7 +1,7 @@
 pub mod graph;
 pub mod gen_weights;
 pub mod imbalance;
-pub mod input;
+pub mod io;
 pub mod algorithms;
 
 // The `Partition` trait allows for partitioning data.
