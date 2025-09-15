@@ -1,7 +1,7 @@
 use rand::{Rng};
 
 /// Generate the weight vector where each vertice has the same weight
-pub fn gen_uniform_weights(no_of_vertices: usize) -> Vec<f32> {
+pub fn gen_uniform_weights(no_of_vertices: usize) -> Vec<f64> {
     vec![1.0; no_of_vertices]
 }
 

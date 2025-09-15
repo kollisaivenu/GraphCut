@@ -32,6 +32,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+## Note
+The Recursive Co-ordinate Bisection algorithm uses ForceAtlas2 library that currently runs only on rust nightly channel. Hence, to run the graph partitioner, set the channel to rust nightly, using the command ```rustup override set nightly```
 ## References
 - Berger, and Bokhari. "A partitioning strategy for nonuniform problems on multiprocessors." IEEE Transactions on Computers 100, no. 5 (1987): 570-580.
 - Bramas, Berenger. "A novel hybrid quicksort algorithm vectorized using AVX-512 on Intel Skylake." arXiv preprint arXiv:1704.08579 (2017).

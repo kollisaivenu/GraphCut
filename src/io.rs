@@ -74,20 +74,15 @@ mod tests {
 
     #[test]
     fn test_read_matrix_market_for_integer() -> Result<(), std::io::Error> {
+        // Arrange
         let temp_dir = tempdir()?;
+        let integer_content = "%%MatrixMarket matrix coordinate integer general\n%\n5 5 3\n1 1 1\n2 2 2\n5 5 5\n";
+        let integer_matrix_file_path = create_mock_file(temp_dir.path(), "integer_matrix.mtx", integer_content);
 
-        let f64_content = "\
-                                %%MatrixMarket matrix coordinate integer general
-                                %
-                                5 5 3
-                                1 1 1
-                                2 2 2
-                                5 5 5";
-        let f64_file_path = create_mock_file(temp_dir.path(), "f64_matrix.mtx", f64_content);
+        // Act
+        let graph_f64 = read_matrix_market_as_graph(&Path::new(&integer_matrix_file_path));
 
-        let graph_f64 = read_matrix_market_as_graph(&Path::new(&f64_file_path));
-
-        // Assert that the graph was created correctly
+        // Assert
         assert_eq!(graph_f64.graph_csr.rows(), 5);
         assert_eq!(graph_f64.graph_csr.cols(), 5);
         assert_eq!(graph_f64.graph_csr.nnz(), 3);
@@ -97,19 +92,15 @@ mod tests {
 
     #[test]
     fn test_read_matrix_market_for_real() -> Result<(), std::io::Error> {
+        // Arrange
         let temp_dir = tempdir()?;
+        let real_content = "%%MatrixMarket matrix coordinate real general\n%\n5 5 3\n1 1 1.0\n2 2 2.0\n5 5 5.0\n";
+        let real_content_file_path = create_mock_file(temp_dir.path(), "f64_matrix.mtx", real_content);
 
-        let f64_content = "\
-                                %%MatrixMarket matrix coordinate integer general
-                                %
-                                5 5 3
-                                1 1 1.0
-                                2 2 2.0
-                                5 5 5.0";
-        let f64_file_path = create_mock_file(temp_dir.path(), "f64_matrix.mtx", f64_content);
-        let graph_f64 = read_matrix_market_as_graph(Path::new(&f64_file_path));
+        // Act
+        let graph_f64 = read_matrix_market_as_graph(Path::new(&real_content_file_path));
 
-        // Assert that the graph was created correctly
+        // Assert
         assert_eq!(graph_f64.graph_csr.rows(), 5);
         assert_eq!(graph_f64.graph_csr.cols(), 5);
         assert_eq!(graph_f64.graph_csr.nnz(), 3);
