@@ -80,7 +80,6 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
         None => StdRng::from_entropy()
     };
 
-    //let mut matched_nodes: HashSet<usize> = HashSet::new();
     let mut matched_nodes = vec![0; graph.len()];
     let mut vertex_mapping = Vec::new();
     let mut old_vertex_to_new_vertex =  HashMap::new();
