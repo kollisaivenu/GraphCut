@@ -80,7 +80,8 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
         None => StdRng::from_entropy()
     };
 
-    let mut matched_nodes: HashSet<usize> = HashSet::new();
+    //let mut matched_nodes: HashSet<usize> = HashSet::new();
+    let mut matched_nodes = vec![0; graph.len()];
     let mut vertex_mapping = Vec::new();
     let mut old_vertex_to_new_vertex =  HashMap::new();
 
@@ -91,7 +92,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
     // Iterate over the vertices of the graph.
     for vertex in vertices{
         // If already matched, then ignore
-        if matched_nodes.contains(&vertex){
+        if matched_nodes[vertex] == 1 {
             continue;
         }
         // For each vertice, finds its most connected vertice, i.e the vertice that
@@ -101,7 +102,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
 
         for (neighbor_vertex, edge_weight) in graph.neighbors(vertex){
             // Ensure the most connected vertice is not already matched.
-            if edge_weight > heaviest_edge_weight && !matched_nodes.contains(&neighbor_vertex) {
+            if edge_weight > heaviest_edge_weight && !(matched_nodes[neighbor_vertex] == 1) {
                 heaviest_edge_weight = edge_weight;
                 heaviest_edge_connected_vertice = Some(neighbor_vertex);
             }
@@ -111,10 +112,10 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
             // After determining the most connected vertice, we merge the original vertice and
             // its most connected vertice into "supervertex"
             vertex_mapping.push(vec![vertex.min(heaviest_edge_connected_vertice.unwrap()),
-                                     vertex.max(heaviest_edge_connected_vertice.unwrap())]);
+                                           vertex.max(heaviest_edge_connected_vertice.unwrap())]);
             // The original node and its most connected vertex are now considered matched.
-            matched_nodes.insert(vertex);
-            matched_nodes.insert(heaviest_edge_connected_vertice.unwrap());
+            matched_nodes[vertex] = 1;
+            matched_nodes[heaviest_edge_connected_vertice.unwrap()] = 1;
 
             // Map the original vertex to its vertex in the coarse graph
             // This will come in handy during the reconstruction of the coarse graph.
@@ -124,7 +125,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
             // This flow is for the scenario when a vertex has no vertex to merge with.
             // (mostly because all of its neighbors are already matched)
             vertex_mapping.push(vec![vertex]);
-            matched_nodes.insert(vertex);
+            matched_nodes[vertex] = 1;
             old_vertex_to_new_vertex.insert(vertex, super_vertex);
         }
         super_vertex += 1;
@@ -280,7 +281,7 @@ impl Default for MultiLevelPartitioner {
     fn default() -> Self {
         MultiLevelPartitioner {
             fa2_iterations: 100,
-            jet_iterations: 12,
+            jet_iterations: 4,
             balance_factor: 0.1,
             jet_filter_ratio: 0.75,
             jet_tolerance_factor: 0.99,
@@ -326,6 +327,10 @@ impl<'a> Partition<(Graph, &'a [f64])> for MultiLevelPartitioner {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+    use std::time::Instant;
+    use crate::gen_weights::gen_random_weights;
+    use crate::io::read_matrix_market_as_graph;
     use super::*;
 
     #[test]
