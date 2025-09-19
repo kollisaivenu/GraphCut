@@ -19,47 +19,41 @@ fn multilevel_partitioner(
     jet_tolerance_factor: f64,
 
 ) {
+    let mut coarse_graph_after_operation = graph.clone();
     let mut coarse_graphs = Vec::new();
     let mut vertex_mappings = Vec::new();
     let mut weights_coarse_graphs = Vec::new();
 
-    coarse_graphs.push(graph);
-    weights_coarse_graphs.push(weights.to_vec());
-
-    let mut no_of_coarse_graphs = 1usize;
+    let mut weights_of_coarse_graph_after_operation = weights.to_vec();
 
     // Keep coarsening the graph until the graph has less than 100 nodes
-    while coarse_graphs[no_of_coarse_graphs-1].len() > 100  {
+    while coarse_graph_after_operation.len() > 100  {
 
-        let (coarse_graph, vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graphs[no_of_coarse_graphs-1], None, &weights_coarse_graphs[no_of_coarse_graphs-1]);
+        let (coarse_graph, vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, None, &weights_of_coarse_graph_after_operation);
+        coarse_graph_after_operation = coarse_graph.clone();
         // Store the coarse graphs at every level
         coarse_graphs.push(coarse_graph);
+
+        weights_of_coarse_graph_after_operation = weights_of_coarse_graph.clone();
         // Store the node weights of every coarse graph at each level
         weights_coarse_graphs.push(weights_of_coarse_graph);
         // Store the vertex mapping (coarse node to finer nodes) of the coarse graph at each level.
         vertex_mappings.push(vertex_mapping);
 
-        no_of_coarse_graphs += 1;
-
     }
 
-    let mut coarse_graph_partition = vec![0; coarse_graphs[no_of_coarse_graphs-1].len()];
-
+    let mut coarse_graph_partition = vec![0; coarse_graph_after_operation.len()];
     // Use forceatlas2 algorithm to provide co-ordinates for each node in the graph to perform the initial partitions
-    let points = convert_graph_to_coordinates(&coarse_graphs[no_of_coarse_graphs-1], weights_coarse_graphs[no_of_coarse_graphs-1].clone(), fa2_iterations);
+    let points = convert_graph_to_coordinates(&coarse_graph_after_operation, weights_of_coarse_graph_after_operation.clone(), fa2_iterations);
 
     // Use Recursive Initial Bisection for initial partition.
-    Rcb { iter_count: 1, tolerance: balance_factor}.partition(&mut coarse_graph_partition, (points, weights_coarse_graphs[no_of_coarse_graphs-1].clone())).unwrap();
+    Rcb { iter_count: 1, tolerance: balance_factor}.partition(&mut coarse_graph_partition, (points, weights_of_coarse_graph_after_operation.clone())).unwrap();
 
     let mut index = coarse_graphs.len() - 2;
 
     while index >= 0 {
         // Uncoarsen the graph till we reach the initial graph.
-        coarse_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mappings[index]);
-
-        if index == 0 {
-            break;
-        }
+        coarse_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mappings[index+1]);
         // Run Jet Refiner to improve the partition.
         JetRefiner { iterations: jet_iterations, 
             tolerance_factor: jet_tolerance_factor, 
@@ -68,12 +62,14 @@ fn multilevel_partitioner(
                                                       (coarse_graphs[index].clone(),
                                                        &weights_coarse_graphs[index])).unwrap();
 
-
+        if index == 0 {
+            break;
+        }
         index -= 1;
     }
-
+    let final_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mappings[0]);
     // Copy over the final partition to the partition array which is passed as input.
-    partition.copy_from_slice(&coarse_graph_partition);
+    partition.copy_from_slice(&final_graph_partition);
 }
 
 // This function coarsens the graph using heavy edge matching algorithm.
@@ -86,7 +82,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
 
     let mut matched_nodes = vec![0; graph.len()];
     let mut vertex_mapping = Vec::new();
-    let mut old_vertex_to_new_vertex = vec![0; graph.len()];
+    let mut old_vertex_to_new_vertex =  HashMap::new();
 
     let mut vertices: Vec<usize> = (0..graph.len()).collect();
     vertices.shuffle(&mut rng);
@@ -122,14 +118,14 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
 
             // Map the original vertex to its vertex in the coarse graph
             // This will come in handy during the reconstruction of the coarse graph.
-            old_vertex_to_new_vertex[vertex] = super_vertex;
-            old_vertex_to_new_vertex[heaviest_edge_connected_vertice.unwrap()] = super_vertex;
+            old_vertex_to_new_vertex.insert(vertex, super_vertex);
+            old_vertex_to_new_vertex.insert(heaviest_edge_connected_vertice.unwrap(), super_vertex);
         } else {
             // This flow is for the scenario when a vertex has no vertex to merge with.
             // (mostly because all of its neighbors are already matched)
             vertex_mapping.push(vec![vertex]);
             matched_nodes[vertex] = 1;
-            old_vertex_to_new_vertex[vertex] = super_vertex;
+            old_vertex_to_new_vertex.insert(vertex, super_vertex);
         }
         super_vertex += 1;
     }
@@ -142,8 +138,8 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
 
     for vertex in 0..graph.len() {
         for (neighbor, edge_weight) in graph.neighbors(vertex){
-            if old_vertex_to_new_vertex[vertex] != old_vertex_to_new_vertex[neighbor] {
-                let key = (old_vertex_to_new_vertex[vertex], old_vertex_to_new_vertex[neighbor]);
+            if old_vertex_to_new_vertex[&vertex] != old_vertex_to_new_vertex[&neighbor] {
+                let key = (old_vertex_to_new_vertex[&vertex], old_vertex_to_new_vertex[&neighbor]);
                 let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0f64);
                 *total_edge_weight += edge_weight;
             }
