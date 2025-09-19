@@ -82,7 +82,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
 
     let mut matched_nodes = vec![0; graph.len()];
     let mut vertex_mapping = Vec::new();
-    let mut old_vertex_to_new_vertex =  HashMap::new();
+    let mut old_vertex_to_new_vertex =  vec![0; graph.len()];
 
     let mut vertices: Vec<usize> = (0..graph.len()).collect();
     vertices.shuffle(&mut rng);
@@ -118,14 +118,14 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
 
             // Map the original vertex to its vertex in the coarse graph
             // This will come in handy during the reconstruction of the coarse graph.
-            old_vertex_to_new_vertex.insert(vertex, super_vertex);
-            old_vertex_to_new_vertex.insert(heaviest_edge_connected_vertice.unwrap(), super_vertex);
+            old_vertex_to_new_vertex[vertex] = super_vertex;
+            old_vertex_to_new_vertex[heaviest_edge_connected_vertice.unwrap()] = super_vertex;
         } else {
             // This flow is for the scenario when a vertex has no vertex to merge with.
             // (mostly because all of its neighbors are already matched)
             vertex_mapping.push(vec![vertex]);
             matched_nodes[vertex] = 1;
-            old_vertex_to_new_vertex.insert(vertex, super_vertex);
+            old_vertex_to_new_vertex[vertex] = super_vertex;
         }
         super_vertex += 1;
     }
@@ -138,8 +138,8 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
 
     for vertex in 0..graph.len() {
         for (neighbor, edge_weight) in graph.neighbors(vertex){
-            if old_vertex_to_new_vertex[&vertex] != old_vertex_to_new_vertex[&neighbor] {
-                let key = (old_vertex_to_new_vertex[&vertex], old_vertex_to_new_vertex[&neighbor]);
+            if old_vertex_to_new_vertex[vertex] != old_vertex_to_new_vertex[neighbor] {
+                let key = (old_vertex_to_new_vertex[vertex], old_vertex_to_new_vertex[neighbor]);
                 let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0f64);
                 *total_edge_weight += edge_weight;
             }
