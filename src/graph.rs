@@ -10,7 +10,7 @@ use ::sprs::CsMat;
 /// Struct that represents a graph
 pub struct Graph{
     /// The CsMat (from sprs) is used to store the graph as a sparse matrix in CSR format
-    pub graph_csr: CsMat<f64>
+    pub graph_csr: CsMat<i64>
 }
 
 impl Graph {
@@ -34,18 +34,18 @@ impl Graph {
     }
 
     /// An iterator over the neighbors of the given vertex.
-    pub fn neighbors(&self, vertex: usize) -> Zip<Cloned<Iter<'_, usize>>, Cloned<Iter<'_, f64>>> {
+    pub fn neighbors(&self, vertex: usize) -> Zip<Cloned<Iter<'_, usize>>, Cloned<Iter<'_, i64>>> {
         let (indices, data) = self.graph_csr.outer_view(vertex).unwrap().into_raw_storage();
         indices.iter().cloned().zip(data.iter().cloned())
     }
 
     /// Insert an edge with two vertices on either ends.
-    pub fn insert(&mut self, vertex1: usize, vertex2: usize, edge_weight: f64) {
+    pub fn insert(&mut self, vertex1: usize, vertex2: usize, edge_weight: i64) {
         self.graph_csr.insert(vertex1, vertex2, edge_weight);
     }
 
     /// Get edge weight for a pair of vertices.
-    pub fn get_edge_weight(&self, vertex1: usize, vertex2: usize) -> Option<f64> {
+    pub fn get_edge_weight(&self, vertex1: usize, vertex2: usize) -> Option<i64> {
         self.graph_csr.get(vertex1, vertex2).cloned()
     }
 
@@ -67,7 +67,7 @@ impl Graph {
     ///    1*  ┆╲ ╱
     ///          * 0
     /// ```
-    pub fn edge_cut(&self, partition: &[usize]) -> f64
+    pub fn edge_cut(&self, partition: &[usize]) -> i64
     {
         debug_assert_eq!(self.len(), partition.len());
 
@@ -88,7 +88,7 @@ impl Graph {
                     .take_while(|(neighbor, _edge_weight)| **neighbor < vertex)
                     .filter(|(neighbor, _edge_weight)| vertex_part != partition[**neighbor])
                     .map(|(_neighbor, edge_weight)| *edge_weight)
-                    .sum::<f64>()
+                    .sum::<i64>()
             })
             .sum()
     }
