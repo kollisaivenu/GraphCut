@@ -1,8 +1,10 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::io::{Write};
+use std::time::Instant;
 use rand::seq::SliceRandom;
 use rand::{SeedableRng};
 use rand::rngs::StdRng;
+use sprs::{TriMat};
 use crate::algorithms::{JetRefiner, Rcb, Error, Point2D};
 use crate::{Partition};
 use crate::graph::Graph;
@@ -81,11 +83,6 @@ fn multilevel_partitioner(
 // This function coarsens the graph using heavy edge matching algorithm.
 fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) -> (Graph, Vec<Vec<usize>>, Vec<i64>) {
 
-    // let mut rng = match seed {
-    //     Some(seed) => StdRng::seed_from_u64(seed),
-    //     None => StdRng::from_entropy()
-    // };
-
     let mut matched_nodes = vec![0; graph.len()];
     let mut vertex_mapping = Vec::new();
     let mut old_vertex_to_new_vertex =  vec![0; graph.len()];
@@ -140,56 +137,30 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
     // Eg. If vertex 0 is connected to vertex 2 and vertex 3 which is merged into vertex 1 in the
     // coarse graph, then in the coarse graph vertex 0 will be connected to vertex 1 with
     // an edge length that is tge sum of vertex 0 and vertex 2 and vertex 0 and vertex 3
-    // let mut edge_to_weight_mapping = HashMap::new();
-    //
-    // for vertex in 0..graph.len() {
-    //     for (neighbor, edge_weight) in graph.neighbors(vertex){
-    //         if old_vertex_to_new_vertex[vertex] != old_vertex_to_new_vertex[neighbor] {
-    //             let key = (old_vertex_to_new_vertex[vertex], old_vertex_to_new_vertex[neighbor]);
-    //             let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0);
-    //             *total_edge_weight += edge_weight;
-    //         }
-    //     }
-    // }
-    //
-    // // Construction of the coarse graph.
-    // let mut new_coarse_graph  = Graph::new();
-    //
-    // for key in edge_to_weight_mapping.keys(){
-    //     let(vertex1, vertex2) = *key;
-    //     let edge_weight = edge_to_weight_mapping.get(key).unwrap();
-    //
-    //     new_coarse_graph.insert(vertex1, vertex2, *edge_weight);
-    // }
-
-    let mut new_coarse_graph = Graph::new();
+    let mut edge_to_weight_mapping = HashMap::new();
 
     for vertex in 0..graph.len() {
         for (neighbor, edge_weight) in graph.neighbors(vertex){
+
             if old_vertex_to_new_vertex[vertex] != old_vertex_to_new_vertex[neighbor] {
-
-                let edge_weight_of_coarse_graph = new_coarse_graph.get_edge_weight(old_vertex_to_new_vertex[vertex],
-                                                                                   old_vertex_to_new_vertex[neighbor]);
-
-                match edge_weight_of_coarse_graph {
-                    Some(edge_weight_of_coarse_graph) => {
-                        new_coarse_graph.insert(old_vertex_to_new_vertex[vertex],
-                                                old_vertex_to_new_vertex[neighbor],
-                                                edge_weight_of_coarse_graph + edge_weight);
-                    }
-                    None => {
-                        new_coarse_graph.insert(old_vertex_to_new_vertex[vertex],
-                                                old_vertex_to_new_vertex[neighbor],
-                                                edge_weight);
-                    }
-                }
-
+                let key = (old_vertex_to_new_vertex[vertex], old_vertex_to_new_vertex[neighbor]);
+                let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0);
+                *total_edge_weight += edge_weight;
             }
         }
     }
 
+    // Construction of the coarse graph.
+    let mut new_coarse_graph  = Graph::new();
+    let mut triplet_matrix = TriMat::new((super_vertex, super_vertex));
 
+    for key in edge_to_weight_mapping.keys(){
+        let(vertex1, vertex2) = *key;
+        let edge_weight = edge_to_weight_mapping.get(key).unwrap();
+        triplet_matrix.add_triplet(vertex1, vertex2, *edge_weight);
+    }
 
+    new_coarse_graph.graph_csr = triplet_matrix.to_csr();
 
     // Construction of the weights array for the coarse graph.
     let mut weights_coarse_graph = vec![0; new_coarse_graph.len()];
@@ -469,14 +440,14 @@ mod tests {
     #[test]
     fn test_ml() -> Result<(), Box<dyn std::error::Error>> {
         let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
-        //let weights = gen_random_weights(graph.len(), 1, 3);
         let weights = gen_uniform_weights(graph.len());
         let mut partition = vec![0; graph.len()];
-
-        MultiLevelPartitioner {..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
-
+        let start = Instant::now();
+        MultiLevelPartitioner {jet_iterations: 12, ..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
+        let elapsed = start.elapsed();
         let edge_cut = graph.edge_cut(&partition);
         println!("Edge cut {:?}", edge_cut);
+        println!("elapsed time {:?}", elapsed);
         Ok(())
     }
 
