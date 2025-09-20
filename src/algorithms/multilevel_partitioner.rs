@@ -84,12 +84,13 @@ fn multilevel_partitioner(
 fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) -> (Graph, Vec<Vec<usize>>, Vec<i64>) {
 
     let mut matched_nodes = vec![0; graph.len()];
-    let mut vertex_mapping = Vec::new();
+    let mut vertex_mapping = Vec::with_capacity(graph.len());
     let mut old_vertex_to_new_vertex =  vec![0; graph.len()];
 
     let mut vertices: Vec<usize> = (0..graph.len()).collect();
     vertices.shuffle(rng);
     let mut super_vertex = 0usize;
+    let mut num_of_edges = graph.graph_csr.nnz();
 
     // Iterate over the vertices of the graph.
     for vertex in vertices{
@@ -123,6 +124,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
             // This will come in handy during the reconstruction of the coarse graph.
             old_vertex_to_new_vertex[vertex] = super_vertex;
             old_vertex_to_new_vertex[heaviest_edge_connected_vertice.unwrap()] = super_vertex;
+            num_of_edges -= 1;
         } else {
             // This flow is for the scenario when a vertex has no vertex to merge with.
             // (mostly because all of its neighbors are already matched)
@@ -137,7 +139,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
     // Eg. If vertex 0 is connected to vertex 2 and vertex 3 which is merged into vertex 1 in the
     // coarse graph, then in the coarse graph vertex 0 will be connected to vertex 1 with
     // an edge length that is tge sum of vertex 0 and vertex 2 and vertex 0 and vertex 3
-    let mut edge_to_weight_mapping = HashMap::new();
+    let mut edge_to_weight_mapping = HashMap::with_capacity(num_of_edges);
 
     for vertex in 0..graph.len() {
         for (neighbor, edge_weight) in graph.neighbors(vertex){
