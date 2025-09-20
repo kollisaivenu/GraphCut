@@ -13,6 +13,7 @@ fn multilevel_partitioner(
     weights: &[i64],
     graph: Graph,
     fa2_iterations: u32,
+    seed: Option<u64>,
     jet_iterations: u32,
     balance_factor: f64,
     jet_filter_ratio: f64,
@@ -26,10 +27,15 @@ fn multilevel_partitioner(
 
     let mut weights_of_coarse_graph_after_operation = weights.to_vec();
 
+    let mut rng = match seed {
+        Some(seed) => StdRng::seed_from_u64(seed),
+        None => StdRng::from_entropy()
+    };
+
     // Keep coarsening the graph until the graph has less than 100 nodes
     while coarse_graph_after_operation.len() > 20  {
 
-        let (coarse_graph, vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, None, &weights_of_coarse_graph_after_operation);
+        let (coarse_graph, vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, &mut rng, &weights_of_coarse_graph_after_operation);
         coarse_graph_after_operation = coarse_graph.clone();
         // Store the coarse graphs at every level
         coarse_graphs.push(coarse_graph);
@@ -73,19 +79,19 @@ fn multilevel_partitioner(
 }
 
 // This function coarsens the graph using heavy edge matching algorithm.
-fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[i64]) -> (Graph, Vec<Vec<usize>>, Vec<i64>) {
+fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) -> (Graph, Vec<Vec<usize>>, Vec<i64>) {
 
-    let mut rng = match seed {
-        Some(seed) => StdRng::seed_from_u64(seed),
-        None => StdRng::from_entropy()
-    };
+    // let mut rng = match seed {
+    //     Some(seed) => StdRng::seed_from_u64(seed),
+    //     None => StdRng::from_entropy()
+    // };
 
     let mut matched_nodes = vec![0; graph.len()];
     let mut vertex_mapping = Vec::new();
     let mut old_vertex_to_new_vertex =  vec![0; graph.len()];
 
     let mut vertices: Vec<usize> = (0..graph.len()).collect();
-    vertices.shuffle(&mut rng);
+    vertices.shuffle(rng);
     let mut super_vertex = 0usize;
 
     // Iterate over the vertices of the graph.
@@ -161,9 +167,6 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[i64])
     for vertex in 0..graph.len() {
         for (neighbor, edge_weight) in graph.neighbors(vertex){
             if old_vertex_to_new_vertex[vertex] != old_vertex_to_new_vertex[neighbor] {
-                // let key = (old_vertex_to_new_vertex[vertex], old_vertex_to_new_vertex[neighbor]);
-                // let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0);
-                // *total_edge_weight += edge_weight;
 
                 let edge_weight_of_coarse_graph = new_coarse_graph.get_edge_weight(old_vertex_to_new_vertex[vertex],
                                                                                    old_vertex_to_new_vertex[neighbor]);
@@ -286,6 +289,9 @@ pub struct MultiLevelPartitioner {
     /// Number of ForceAtlas2 iterations to run on the coarsed graph to get generate co-ordinates for the graph
     pub fa2_iterations: u32,
 
+    /// Seed for MultiLevel Graph Partitioner
+    pub seed: Option<u64>,
+
     /// This indicates the number of times jetlp/jetrw combination should run without seeing
     /// any improvement before terminating the algorithm
     pub jet_iterations: u32,
@@ -312,6 +318,7 @@ impl Default for MultiLevelPartitioner {
     fn default() -> Self {
         MultiLevelPartitioner {
             fa2_iterations: 100,
+            seed: None,
             jet_iterations: 12,
             balance_factor: 0.1,
             jet_filter_ratio: 0.75,
@@ -347,6 +354,7 @@ impl<'a> Partition<(Graph, &'a [i64])> for MultiLevelPartitioner {
             weights,
             adjacency,
             self.fa2_iterations,
+            self.seed,
             self.jet_iterations,
             self.balance_factor,
             self.jet_filter_ratio,
@@ -377,10 +385,10 @@ mod tests {
         graph.insert(2, 1, 15);
 
         let weights = [3, 4, 5];
-        let seed = Some(5);
+        let mut rng = StdRng::seed_from_u64(5);
 
         // Act
-        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, seed, &weights);
+        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
 
 
         // Assert
@@ -412,12 +420,11 @@ mod tests {
         graph.insert(4, 3, 6);
         graph.insert(0, 4, 10);
 
-        let seed = Some(5);
-
+        let mut rng = StdRng::seed_from_u64(5);
         let weights = [1, 2, 3, 4, 5];
 
         // Act
-        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, seed, &weights);
+        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
 
         // Assert
         assert_eq!(6, coarse_graph.get_edge_weight(0, 1).unwrap());
