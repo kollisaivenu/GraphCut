@@ -48,10 +48,15 @@ fn jet_refiner(
                                                                                                            partition);
     let mut locked_vertices = vec![false; adjacency.len()];
 
+    let mut imbalance_of_best_partition = imbalance(num_of_partitions, &partition, weights.par_iter().cloned());
+    let mut best_partition_edge_cut = adjacency.edge_cut(&partition);
+    let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned());
+
+
     while current_iteration < iterations {
 
         let moves;
-        if imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned()) < balance_factor {
+        if imbalance_of_current_iter_partition < balance_factor {
             // the jetlp subroutine is used to generate a better partition
             moves = jetlp(&adjacency,
                           &partition_iter,
@@ -80,9 +85,7 @@ fn jet_refiner(
                                              &mut vertex_connectivity_data_structure,
                                              moves);
 
-        let imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned());
-        let imbalance_of_best_partition = imbalance(num_of_partitions, &partition, weights.par_iter().cloned());
-        let best_partition_edge_cut = adjacency.edge_cut(&partition);
+        imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned());
         let curr_iter_partition_edge_cut = adjacency.edge_cut(&partition_iter);
 
         // Check if the current iteration partition is balance
@@ -94,6 +97,8 @@ fn jet_refiner(
                     current_iteration = 0;
                 }
                 partition.copy_from_slice(&partition_iter);
+                imbalance_of_best_partition = imbalance_of_current_iter_partition;
+                best_partition_edge_cut = curr_iter_partition_edge_cut;
             } else {
                 current_iteration += 1;
             }
@@ -101,6 +106,8 @@ fn jet_refiner(
             // Current iteration is better balanced than the best iteration, hence this is made
             // the best iteration
             partition.copy_from_slice(&partition_iter);
+            imbalance_of_best_partition = imbalance_of_current_iter_partition;
+            best_partition_edge_cut = curr_iter_partition_edge_cut;
             current_iteration = 0
         } else {
             current_iteration += 1;
