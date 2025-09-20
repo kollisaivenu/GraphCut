@@ -47,7 +47,7 @@ fn jet_refiner(
     let num_of_partitions = partition.iter().collect::<HashSet<_>>().len();
     let mut vertex_connectivity_data_structure = init_vertex_connectivity_data_structure(&adjacency,
                                                                                                            partition);
-    let mut locked_vertices = HashSet::new();
+    let mut locked_vertices = vec![false; adjacency.len()];
 
     while current_iteration < iterations {
 
@@ -63,7 +63,7 @@ fn jet_refiner(
             // Based on the suggested moves of the jetlp subroutine, the vertices to be moved are locked
             // to ensure that they don't become eligible to move in the next iteration.
             // This prevents oscillation of vertices
-            locked_vertices = get_locked_vertices(&moves);
+            lock_vertices(&moves, &mut locked_vertices);
         } else {
             // the jetrw subroutine is run to balance the weights of the partition
             // (should the partitions weights become highly imbalanced)
@@ -111,13 +111,13 @@ fn jet_refiner(
     partition.copy_from_slice(&partition_best);
 }
 
-fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &Vec<HashMap<usize, i64>>, locked_vertices: &HashSet<usize>, filter_ratio: f64) -> Vec<Move> {
+fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &Vec<HashMap<usize, i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
 
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
     let (partition_dest, gain): (Vec<usize>, Vec<i64>) = (0..graph.len()).into_par_iter().map(|vertex| {
         let mut calculated_gain = 0;
         let mut dest_partition = 0;
-        if !locked_vertices.contains(&vertex) {
+        if !locked_vertices[vertex] {
             let mut neighbors_eligible_partitions = HashSet::new();
 
             for (neighbor_vertex, _edge_weight) in graph.neighbors(vertex) {
@@ -289,26 +289,23 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], vertex_con
     moves
 }
 
-fn get_locked_vertices(moves: &Vec<Move>) -> HashSet<usize> {
+fn lock_vertices(moves: &Vec<Move>, locked_vertices: &mut [bool]) {
     // This function gets the list of locked vertices that shouldn't be moved in the subsequent iterations.
 
-    let mut locked_vertices = HashSet::new();
-
     for single_move in moves{
-        locked_vertices.insert(single_move.vertex);
+        locked_vertices[single_move.vertex] = true;
     }
 
-    locked_vertices
 }
 
-fn gain_conn_ratio_filter(locked_vertices: &HashSet<usize>, partitions: &[usize], gain: &[i64], vertex_connectivity_data_structure: &Vec<HashMap<usize, i64>>, filter_ratio: f64) -> Vec<usize> {
+fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[i64], vertex_connectivity_data_structure: &Vec<HashMap<usize, i64>>, filter_ratio: f64) -> Vec<usize> {
     // Get a list of vertices that have a positive gain or slightly negative gain value (based on the filter ratio).
 
     let num_vertices = partitions.len();
     let mut list_of_moveable_vertices  = Vec::new();
 
     for vertex in 0..num_vertices {
-        if !locked_vertices.contains(&vertex)
+        if (!locked_vertices[vertex])
             &&
             (gain[vertex] > 0 || -gain[vertex] < (filter_ratio * (conn(vertex, partitions[vertex], vertex_connectivity_data_structure) as f64)).floor() as i64){
             list_of_moveable_vertices.push(vertex);
@@ -558,15 +555,16 @@ mod tests {
         let moves = vec![Move{vertex:0, partition_id:3},
                          Move{vertex:3, partition_id:4},
                          Move{vertex:4, partition_id:5}];
+        let mut locked_vertices = [false; 5];
 
         // Act
-        let locked_vertices = get_locked_vertices(&moves);
+        lock_vertices(&moves, &mut locked_vertices);
 
         // Assert
-        assert!(locked_vertices.contains(&(0usize)));
-        assert!(locked_vertices.contains(&(3usize)));
-        assert!(locked_vertices.contains(&(4usize)));
-        assert!(!locked_vertices.contains(&(2usize)));
+        assert!(locked_vertices[0usize]);
+        assert!(locked_vertices[3usize]);
+        assert!(locked_vertices[4usize]);
+        assert!(!locked_vertices[2usize]);
 
     }
     #[test]
@@ -683,9 +681,9 @@ mod tests {
             &partitions);
         let gain = [-1, 2, -2, -2];
         let filter_ratio = 0.75;
-        let mut locked_vertices = HashSet::new();
-        locked_vertices.insert(2);
-        locked_vertices.insert(3);
+        let mut locked_vertices = [false; 4];
+        locked_vertices[2] = true;
+        locked_vertices[3] = true;
 
         // Act
         let eligible_vertices_to_move = gain_conn_ratio_filter(
@@ -874,7 +872,7 @@ mod tests {
         adjacency.insert(0, 3, 2);
 
         let partitions = [0, 1, 1, 0];
-        let locked_vertices = HashSet::new();
+        let locked_vertices = [false; 4];
 
         // Act
         let vtx_conn_data_struct = init_vertex_connectivity_data_structure(
