@@ -41,7 +41,6 @@ fn jet_refiner(
     debug_assert_eq!(partition.len(), weights.len());
     debug_assert_eq!(partition.len(), adjacency.len());
 
-    let mut partition_best = partition.to_vec();
     let mut partition_iter = partition.to_vec();
     let mut current_iteration = 0;
     let num_of_partitions = partition.iter().collect::<HashSet<_>>().len();
@@ -82,8 +81,8 @@ fn jet_refiner(
                                              moves);
 
         let imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned());
-        let imbalance_of_best_partition = imbalance(num_of_partitions, &partition_best, weights.par_iter().cloned());
-        let best_partition_edge_cut = adjacency.edge_cut(&partition_best);
+        let imbalance_of_best_partition = imbalance(num_of_partitions, &partition, weights.par_iter().cloned());
+        let best_partition_edge_cut = adjacency.edge_cut(&partition);
         let curr_iter_partition_edge_cut = adjacency.edge_cut(&partition_iter);
 
         // Check if the current iteration partition is balance
@@ -94,21 +93,19 @@ fn jet_refiner(
                 if curr_iter_partition_edge_cut < (tolerance_factor*(best_partition_edge_cut as f64)).floor() as i64 {
                     current_iteration = 0;
                 }
-                partition_best = partition_iter.to_vec();
+                partition.copy_from_slice(&partition_iter);
             } else {
                 current_iteration += 1;
             }
         } else if imbalance_of_current_iter_partition < imbalance_of_best_partition {
             // Current iteration is better balanced than the best iteration, hence this is made
             // the best iteration
-            partition_best = partition_iter.to_vec();
+            partition.copy_from_slice(&partition_iter);
             current_iteration = 0
         } else {
             current_iteration += 1;
         }
     }
-
-    partition.copy_from_slice(&partition_best);
 }
 
 fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &Vec<HashMap<usize, i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
