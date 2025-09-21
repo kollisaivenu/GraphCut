@@ -96,6 +96,7 @@ fn jet_refiner(
                 if curr_iter_partition_edge_cut < (tolerance_factor*(best_partition_edge_cut as f64)).floor() as i64 {
                     current_iteration = 0;
                 }
+
                 partition.copy_from_slice(&partition_iter);
                 imbalance_of_best_partition = imbalance_of_current_iter_partition;
                 best_partition_edge_cut = curr_iter_partition_edge_cut;
@@ -208,22 +209,29 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], vertex_con
     // Find out which the partitions are heavy (need to be downsized) and what partitions are light
     // (can act as valid destination partitions).
     for partition_id in 0..num_partitions{
+        let weight_of_partition = get_weight_of_partition(partition_id, partitions, vertex_weights);
 
-        if max_weight_per_partitions < get_weight_of_partition(partition_id, partitions, vertex_weights) {
+        if max_weight_per_partitions < weight_of_partition {
             heavy_partitions.push(partition_id);
         }
 
-        if max_weight_dest >= get_weight_of_partition(partition_id, partitions, vertex_weights) {
+        if max_weight_dest >= weight_of_partition {
             light_partitions.push(partition_id);
         }
+    }
+    let mut partition_weights = vec![0.; num_partitions];
+
+    for partition_id in 0..num_partitions{
+        partition_weights[partition_id] = get_weight_of_partition(partition_id,
+                                                                  partitions,
+                                                                  vertex_weights);
     }
 
     // Find out the loss for each eligible vertex move (from an overweight partition to an underweight partition).
     // A positive loss indicates an increase in edge cut.
     let (partitions_dest, loss): (Vec<usize>, Vec<i64>) = (0..num_of_vertices).into_par_iter().map(|vertex| {
-        let weight_of_partition = get_weight_of_partition(partitions[vertex],
-                                                          partitions,
-                                                          vertex_weights);
+        let weight_of_partition = partition_weights[partitions[vertex]];
+
         let limit = 1.5*(weight_of_partition as f64 - ((total_weight as f64)/(num_partitions as f64)));
 
         let mut calculated_loss = 0;
