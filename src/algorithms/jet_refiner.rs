@@ -167,6 +167,7 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
 
     // A heuristic attempt is made to approximate the true gain that would occur since
     // two positive moves when applied simultaneously can be detrimental.
+    let first_filter_eligible_vertices = first_filter_eligible_moves.clone().into_iter().collect::<HashSet<_>>();
     let gain2: Vec<i64> = (0..first_filter_eligible_moves.len()).into_par_iter().map(|vertex_index|{
         let vertex = first_filter_eligible_moves[vertex_index];
         let mut gain_for_vertex = 0;
@@ -174,7 +175,7 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
         for (neighbor_vertex, edge_weight) in graph.neighbors(vertex){
             let mut partition_source = partition[neighbor_vertex];
 
-            if is_higher_placed(neighbor_vertex, vertex, &gain, &first_filter_eligible_moves) {
+            if is_higher_placed(neighbor_vertex, vertex, &gain, &first_filter_eligible_vertices) {
                 partition_source = partition_dest[neighbor_vertex];
             }
 
@@ -420,7 +421,7 @@ fn update_parts_and_vertex_connectivity(
     }
 }
 
-fn is_higher_placed(vertex1: usize, vertex2: usize, gain: &[i64], list_of_vertices: &[usize]) -> bool {
+fn is_higher_placed(vertex1: usize, vertex2: usize, gain: &[i64], list_of_vertices: &HashSet<usize>) -> bool {
     // Checks if vertex1 is better ranked than vertex2 (used in the vertex afterburner).
 
     if list_of_vertices.contains(&vertex1) && (gain[vertex1] > gain[vertex2] || (gain[vertex1] == gain[vertex2] && vertex1 < vertex2)){
@@ -765,7 +766,7 @@ mod tests {
     fn test_is_higher_placed(){
         // Arrange
         let gain = [4, 2, 2, 1];
-        let list_of_vertices = [0, 1, 2];
+        let list_of_vertices = [0, 1, 2].into_iter().collect();
 
         // Act
         let result1 = is_higher_placed(0, 2, &gain, &list_of_vertices);
