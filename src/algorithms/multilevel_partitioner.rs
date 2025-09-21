@@ -35,7 +35,7 @@ fn multilevel_partitioner(
     };
 
     // Keep coarsening the graph until the graph has less than 100 nodes
-    while coarse_graph_after_operation.len() > 20  {
+    while coarse_graph_after_operation.len() > 100  {
 
         let (coarse_graph, vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, &mut rng, &weights_of_coarse_graph_after_operation);
         coarse_graph_after_operation = coarse_graph.clone();
