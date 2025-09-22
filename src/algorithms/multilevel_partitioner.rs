@@ -154,7 +154,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
 
     // Construction of the coarse graph.
     let mut new_coarse_graph  = Graph::new();
-    let mut triplet_matrix = TriMat::new((super_vertex, super_vertex));
+    let mut triplet_matrix = TriMat::with_capacity((super_vertex, super_vertex), num_of_edges);
 
     for key in edge_to_weight_mapping.keys(){
         let(vertex1, vertex2) = *key;
