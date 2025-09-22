@@ -305,6 +305,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], vertex_con
 
 fn lock_vertices(moves: &Vec<Move>, locked_vertices: &mut [bool]) {
     // This function gets the list of locked vertices that shouldn't be moved in the subsequent iterations.
+    locked_vertices.fill(false);
 
     for single_move in moves{
         locked_vertices[single_move.vertex] = true;
