@@ -7,9 +7,7 @@
 use crate::algorithms::Error;
 use crate::imbalance::imbalance;
 use std::collections::HashSet;
-use std::collections::HashMap;
 use std::ops::{AddAssign, Neg, Sub, SubAssign};
-use nalgebra::ComplexField;
 use num_traits::{Bounded, ToPrimitive, Zero};
 use rand::{thread_rng, Rng};
 use rayon::prelude::*;
@@ -52,7 +50,7 @@ fn jet_refiner(
     let mut imbalance_of_best_partition = imbalance(num_of_partitions, &partition, weights.par_iter().cloned());
     let mut best_partition_edge_cut = adjacency.edge_cut(&partition);
     let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned());
-
+    let total_weight: i64 = weights.iter().cloned().sum();
 
     while current_iteration < iterations {
 
@@ -75,6 +73,7 @@ fn jet_refiner(
             moves = jetrw(&adjacency,
                           &partition_iter,
                           weights,
+                          total_weight,
                           &vertex_connectivity_data_structure,
                           num_of_partitions,
                           balance_factor);
@@ -131,6 +130,7 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
                     neighbors_eligible_partitions.insert(partition[neighbor_vertex]);
                 }
             }
+
             let neighbors_eligible_partitions: Vec<usize> = neighbors_eligible_partitions.into_iter().collect();
 
             if !neighbors_eligible_partitions.is_empty() {
@@ -192,9 +192,8 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
     non_negative_gain_filter(&first_filter_eligible_moves, &partition_dest, &gain2)
 }
 
-fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], vertex_connectivity_data_structure: &Vec<Vec<i64>>, num_partitions: usize, balance_factor: f64) -> Vec<Move> {
+fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<Vec<i64>>, num_partitions: usize, balance_factor: f64) -> Vec<Move> {
     let max_slots: usize = 25;
-    let total_weight: i64 = vertex_weights.iter().cloned().sum();
     let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_partitions as f64);
     let num_of_vertices = graph.len();
     let mut heavy_partitions: Vec<usize> = Vec::new();
@@ -857,6 +856,7 @@ mod tests {
 
         let vtx_weights = [1, 4, 4, 1];
         let partitions = [0, 0, 0, 1];
+        let total_weight = 10;
 
         // Act
         let vtx_conn_data_struct =
@@ -864,7 +864,7 @@ mod tests {
                 &adjacency,
                 &partitions,
                 2);
-        let moves = jetrw(&adjacency, &partitions, &vtx_weights, &vtx_conn_data_struct, 2, 0.1);
+        let moves = jetrw(&adjacency, &partitions, &vtx_weights, total_weight, &vtx_conn_data_struct, 2, 0.1);
 
         // Assert
         assert_eq!(moves.len(), 2);
