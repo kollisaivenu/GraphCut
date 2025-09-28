@@ -119,8 +119,8 @@ fn jet_refiner(
 fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &Vec<Vec<i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
 
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
-    let (partition_dest, gain): (Vec<usize>, Vec<i64>) = (0..graph.len()).into_par_iter().map(|vertex| {
-        let mut calculated_gain = 0;
+    let (partition_dest, gain): (Vec<usize>, Vec<Option<i64>>) = (0..graph.len()).into_par_iter().map(|vertex| {
+        let mut calculated_gain = None;
         let mut dest_partition = 0;
         if !locked_vertices[vertex] {
             let mut neighbors_eligible_partitions = HashSet::new();
@@ -140,7 +140,7 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
                     vertex_connectivity_data_structure,
                 );
 
-                calculated_gain = conn(
+                calculated_gain = Some(conn(
                     vertex,
                     dest_partition,
                     vertex_connectivity_data_structure,
@@ -148,7 +148,7 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
                     vertex,
                     partition[vertex],
                     vertex_connectivity_data_structure,
-                );
+                ));
 
             }
         }
@@ -222,6 +222,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
     }
     let mut partition_weights = vec![0.; num_partitions];
 
+    // Precompute the weight of each partition.
     for partition_id in 0..num_partitions{
         partition_weights[partition_id] = get_weight_of_partition(partition_id,
                                                                   partitions,
@@ -312,7 +313,7 @@ fn lock_vertices(moves: &Vec<Move>, locked_vertices: &mut [bool]) {
 
 }
 
-fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[i64], vertex_connectivity_data_structure: &Vec<Vec<i64>>, filter_ratio: f64) -> Vec<usize> {
+fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &Vec<Vec<i64>>, filter_ratio: f64) -> Vec<usize> {
     // Get a list of vertices that have a positive gain or slightly negative gain value (based on the filter ratio).
 
     let num_vertices = partitions.len();
@@ -321,7 +322,9 @@ fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: 
     for vertex in 0..num_vertices {
         if (!locked_vertices[vertex])
             &&
-            (gain[vertex] > 0 || -gain[vertex] < (filter_ratio * (conn(vertex, partitions[vertex], vertex_connectivity_data_structure) as f64)).floor() as i64){
+            !gain[vertex].is_none()
+            &&
+            (gain[vertex].unwrap() > 0 || -gain[vertex].unwrap() < (filter_ratio * (conn(vertex, partitions[vertex], vertex_connectivity_data_structure) as f64)).floor() as i64){
             list_of_moveable_vertices.push(vertex);
         }
     }
@@ -421,10 +424,15 @@ fn update_parts_and_vertex_connectivity(
     }
 }
 
-fn is_higher_placed(vertex1: usize, vertex2: usize, gain: &[i64], list_of_vertices: &HashSet<usize>) -> bool {
+fn is_higher_placed(vertex1: usize, vertex2: usize, gain: &[Option<i64>], list_of_vertices: &HashSet<usize>) -> bool {
     // Checks if vertex1 is better ranked than vertex2 (used in the vertex afterburner).
 
-    if list_of_vertices.contains(&vertex1) && (gain[vertex1] > gain[vertex2] || (gain[vertex1] == gain[vertex2] && vertex1 < vertex2)){
+    if list_of_vertices.contains(&vertex1) && !gain[vertex1].is_none()
+        &&
+        !gain[vertex2].is_none()
+        && ((gain[vertex1].unwrap() > gain[vertex2].unwrap())
+            ||
+           (gain[vertex1].unwrap() == gain[vertex2].unwrap() && vertex1 < vertex2)){
         return true;
     }
 
@@ -555,7 +563,6 @@ impl<'a> crate::Partition<(Graph, &'a [i64])> for JetRefiner {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
     use super::*;
 
     #[test]
@@ -692,7 +699,7 @@ mod tests {
             &adjacency,
             &partitions,
             2);
-        let gain = [-1, 2, -2, -2];
+        let gain = [Some(-1), Some(2), Some(-2), Some(-2)];
         let filter_ratio = 0.75;
         let mut locked_vertices = [false; 4];
         locked_vertices[2] = true;
@@ -765,7 +772,7 @@ mod tests {
     #[test]
     fn test_is_higher_placed(){
         // Arrange
-        let gain = [4, 2, 2, 1];
+        let gain = [Some(4), Some(2), Some(2), Some(1)];
         let list_of_vertices = [0, 1, 2].into_iter().collect();
 
         // Act

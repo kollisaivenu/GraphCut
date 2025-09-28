@@ -1,6 +1,5 @@
 use std::collections::{HashMap};
 use std::io::{Write};
-use std::time::Instant;
 use rand::seq::SliceRandom;
 use rand::{SeedableRng};
 use rand::rngs::StdRng;
@@ -152,7 +151,8 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
         }
     }
 
-    // Construction of the coarse graph.
+    // Construction of the coarse graph. First contruct a TriMat and then convert it to CSR format.
+    // This is more efficient.
     let mut new_coarse_graph  = Graph::new();
     let mut triplet_matrix = TriMat::with_capacity((super_vertex, super_vertex), num_of_edges);
 
@@ -438,19 +438,4 @@ mod tests {
         let uncoarse_graph_imbalance = imbalance(2, &uncoarsed_graph_partition, weights_uncoarse_graph.clone());
         assert!((coarse_graph_imbalance - uncoarse_graph_imbalance).abs() < epsilon);
     }
-
-    #[test]
-    fn test_ml() -> Result<(), Box<dyn std::error::Error>> {
-        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
-        let weights = gen_uniform_weights(graph.len());
-        let mut partition = vec![0; graph.len()];
-        let start = Instant::now();
-        MultiLevelPartitioner {jet_iterations: 12, ..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
-        let elapsed = start.elapsed();
-        let edge_cut = graph.edge_cut(&partition);
-        println!("Edge cut {:?}", edge_cut);
-        println!("elapsed time {:?}", elapsed);
-        Ok(())
-    }
-
 }
