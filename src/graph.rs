@@ -74,23 +74,31 @@ impl Graph {
         let indptr = self.graph_csr.indptr().into_raw_storage();
         let indices = self.graph_csr.indices();
         let data = self.graph_csr.data();
-        indptr
-            .par_iter()
-            .zip(&indptr[1..])
-            .enumerate()
-            .map(|(vertex, (start, end))| {
-                let neighbors = &indices[*start..*end];
-                let edge_weights = &data[*start..*end];
-                let vertex_part = partition[vertex];
-                neighbors
-                    .iter()
-                    .zip(edge_weights)
-                    .take_while(|(neighbor, _edge_weight)| **neighbor < vertex)
-                    .filter(|(neighbor, _edge_weight)| vertex_part != partition[**neighbor])
-                    .map(|(_neighbor, edge_weight)| *edge_weight)
-                    .sum::<i64>()
-            })
-            .sum()
+
+        let num_vertices = self.len();
+        let mut total_cut: i64 = 0;
+
+        for vertex in 0..num_vertices {
+            let start_index = indptr[vertex];
+            let end_index = indptr[vertex + 1];
+
+            let neighbors = &indices[start_index..end_index];
+            let edge_weights = &data[start_index..end_index];
+
+            let vertex_part = partition[vertex];
+
+            let vertex_cut: i64 = neighbors
+                .iter()
+                .zip(edge_weights)
+                .filter(|(neighbor, _edge_weight)| **neighbor < vertex)
+                .filter(|(neighbor, _edge_weight)| vertex_part != partition[**neighbor])
+                .map(|(_neighbor, edge_weight)| *edge_weight)
+                .sum();
+
+            total_cut += vertex_cut;
+        }
+
+        total_cut
     }
 
     /// Clone the graph

@@ -47,9 +47,9 @@ fn jet_refiner(
                                                                                                         num_of_partitions);
     let mut locked_vertices = vec![false; adjacency.len()];
 
-    let mut imbalance_of_best_partition = imbalance(num_of_partitions, &partition, weights.par_iter().cloned());
+    let mut imbalance_of_best_partition = imbalance(num_of_partitions, &partition, weights.into_iter().cloned());
     let mut best_partition_edge_cut = adjacency.edge_cut(&partition);
-    let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned());
+    let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.into_iter().cloned());
     let total_weight: i64 = weights.iter().cloned().sum();
 
     while current_iteration < iterations {
@@ -85,7 +85,7 @@ fn jet_refiner(
                                              &mut vertex_connectivity_data_structure,
                                              moves);
 
-        imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.par_iter().cloned());
+        imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.into_iter().cloned());
         let curr_iter_partition_edge_cut = adjacency.edge_cut(&partition_iter);
 
         // Check if the current iteration partition is balance
@@ -119,7 +119,7 @@ fn jet_refiner(
 fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &Vec<Vec<i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
 
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
-    let (partition_dest, gain): (Vec<usize>, Vec<Option<i64>>) = (0..graph.len()).into_par_iter().map(|vertex| {
+    let (partition_dest, gain): (Vec<usize>, Vec<Option<i64>>) = (0..graph.len()).map(|vertex| {
         let mut calculated_gain = None;
         let mut dest_partition = 0;
         if !locked_vertices[vertex] {
@@ -168,7 +168,7 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
     // A heuristic attempt is made to approximate the true gain that would occur since
     // two positive moves when applied simultaneously can be detrimental.
     let first_filter_eligible_vertices = first_filter_eligible_moves.clone().into_iter().collect::<HashSet<_>>();
-    let gain2: Vec<i64> = (0..first_filter_eligible_moves.len()).into_par_iter().map(|vertex_index|{
+    let gain2: Vec<i64> = (0..first_filter_eligible_moves.len()).map(|vertex_index|{
         let vertex = first_filter_eligible_moves[vertex_index];
         let mut gain_for_vertex = 0;
 
@@ -231,7 +231,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
 
     // Find out the loss for each eligible vertex move (from an overweight partition to an underweight partition).
     // A positive loss indicates an increase in edge cut.
-    let (partitions_dest, loss): (Vec<usize>, Vec<i64>) = (0..num_of_vertices).into_par_iter().map(|vertex| {
+    let (partitions_dest, loss): (Vec<usize>, Vec<i64>) = (0..num_of_vertices).map(|vertex| {
         let weight_of_partition = partition_weights[partitions[vertex]];
 
         let limit = 1.5*(weight_of_partition as f64 - ((total_weight as f64)/(num_partitions as f64)));
