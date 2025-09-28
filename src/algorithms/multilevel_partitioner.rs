@@ -1,8 +1,9 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap};
 use std::io::{Write};
 use rand::seq::SliceRandom;
 use rand::{SeedableRng};
 use rand::rngs::StdRng;
+use sprs::{TriMat};
 use crate::algorithms::{JetRefiner, Rcb, Error, Point2D};
 use crate::{Partition};
 use crate::graph::Graph;
@@ -10,9 +11,10 @@ use crate::imbalance::imbalance;
 
 fn multilevel_partitioner(
     partition: &mut [usize],
-    weights: &[f64],
+    weights: &[i64],
     graph: Graph,
     fa2_iterations: u32,
+    seed: Option<u64>,
     jet_iterations: u32,
     balance_factor: f64,
     jet_filter_ratio: f64,
@@ -26,10 +28,15 @@ fn multilevel_partitioner(
 
     let mut weights_of_coarse_graph_after_operation = weights.to_vec();
 
+    let mut rng = match seed {
+        Some(seed) => StdRng::seed_from_u64(seed),
+        None => StdRng::from_entropy()
+    };
+
     // Keep coarsening the graph until the graph has less than 100 nodes
     while coarse_graph_after_operation.len() > 100  {
 
-        let (coarse_graph, vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, None, &weights_of_coarse_graph_after_operation);
+        let (coarse_graph, vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, &mut rng, &weights_of_coarse_graph_after_operation);
         coarse_graph_after_operation = coarse_graph.clone();
         // Store the coarse graphs at every level
         coarse_graphs.push(coarse_graph);
@@ -73,21 +80,17 @@ fn multilevel_partitioner(
 }
 
 // This function coarsens the graph using heavy edge matching algorithm.
-fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64]) -> (Graph, Vec<Vec<usize>>, Vec<f64>) {
-
-    let mut rng = match seed {
-        Some(seed) => StdRng::seed_from_u64(seed),
-        None => StdRng::from_entropy()
-    };
+fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) -> (Graph, Vec<Vec<usize>>, Vec<i64>) {
 
     let mut matched_nodes = vec![0; graph.len()];
-    let mut vertex_mapping = Vec::new();
+    let mut vertex_mapping = Vec::with_capacity(graph.len());
     let mut old_vertex_to_new_vertex =  vec![0; graph.len()];
 
     let mut vertices: Vec<usize> = (0..graph.len()).collect();
-    vertices.shuffle(&mut rng);
-
+    vertices.shuffle(rng);
     let mut super_vertex = 0usize;
+    let mut num_of_edges = graph.graph_csr.nnz();
+
     // Iterate over the vertices of the graph.
     for vertex in vertices{
         // If already matched, then ignore
@@ -96,7 +99,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
         }
         // For each vertice, finds its most connected vertice, i.e the vertice that
         // is connected with the greatest edge weight
-        let mut heaviest_edge_weight = 0f64;
+        let mut heaviest_edge_weight = 0;
         let mut heaviest_edge_connected_vertice = None;
 
         for (neighbor_vertex, edge_weight) in graph.neighbors(vertex){
@@ -120,6 +123,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
             // This will come in handy during the reconstruction of the coarse graph.
             old_vertex_to_new_vertex[vertex] = super_vertex;
             old_vertex_to_new_vertex[heaviest_edge_connected_vertice.unwrap()] = super_vertex;
+            num_of_edges -= 1;
         } else {
             // This flow is for the scenario when a vertex has no vertex to merge with.
             // (mostly because all of its neighbors are already matched)
@@ -134,30 +138,34 @@ fn heavy_edge_matching_coarse(graph: &Graph, seed: Option<u64>, weights: &[f64])
     // Eg. If vertex 0 is connected to vertex 2 and vertex 3 which is merged into vertex 1 in the
     // coarse graph, then in the coarse graph vertex 0 will be connected to vertex 1 with
     // an edge length that is tge sum of vertex 0 and vertex 2 and vertex 0 and vertex 3
-    let mut edge_to_weight_mapping = HashMap::new();
+    let mut edge_to_weight_mapping = HashMap::with_capacity(num_of_edges);
 
     for vertex in 0..graph.len() {
         for (neighbor, edge_weight) in graph.neighbors(vertex){
+
             if old_vertex_to_new_vertex[vertex] != old_vertex_to_new_vertex[neighbor] {
                 let key = (old_vertex_to_new_vertex[vertex], old_vertex_to_new_vertex[neighbor]);
-                let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0f64);
+                let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0);
                 *total_edge_weight += edge_weight;
             }
         }
     }
 
-    // Construction of the coarse graph.
+    // Construction of the coarse graph. First contruct a TriMat and then convert it to CSR format.
+    // This is more efficient.
     let mut new_coarse_graph  = Graph::new();
+    let mut triplet_matrix = TriMat::with_capacity((super_vertex, super_vertex), num_of_edges);
 
     for key in edge_to_weight_mapping.keys(){
         let(vertex1, vertex2) = *key;
         let edge_weight = edge_to_weight_mapping.get(key).unwrap();
-
-        new_coarse_graph.insert(vertex1, vertex2, *edge_weight);
+        triplet_matrix.add_triplet(vertex1, vertex2, *edge_weight);
     }
 
+    new_coarse_graph.graph_csr = triplet_matrix.to_csr();
+
     // Construction of the weights array for the coarse graph.
-    let mut weights_coarse_graph = vec![0f64; new_coarse_graph.len()];
+    let mut weights_coarse_graph = vec![0; new_coarse_graph.len()];
 
     for coarse_vertex in 0..vertex_mapping.len(){
         for uncoarse_vertex in vertex_mapping[coarse_vertex].iter(){
@@ -193,20 +201,20 @@ fn partition_uncoarse(partition: &[usize], vertex_mapping: &Vec<Vec<usize>>) -> 
 }
 
 // This function computes 2D coordinates for graph nodes using forceatlas2 algorithm.
-fn convert_graph_to_coordinates(graph: &Graph, weights: Vec<f64>, iter:u32) -> Vec<Point2D> {
+fn convert_graph_to_coordinates(graph: &Graph, weights: Vec<i64>, iter:u32) -> Vec<Point2D> {
     // Create a vector where the elements are in the structure ((vertex1, vertex2), edge_weight).
     let mut edges = Vec::new();
 
     for node in 0..graph.len() {
         for (neighbor_node, edge_weight) in graph.neighbors(node) {
-            edges.push(((node, neighbor_node), edge_weight));
+            edges.push(((node, neighbor_node), edge_weight as f64));
         }
     }
 
     // Run forceatlas2 for the graph to generate the coordinates.
     let mut layout = forceatlas2::Layout::<f64, 2>::from_graph_with_degree_mass(
         edges,
-        weights,
+        weights.iter().map(|&x| x as f64).collect::<Vec<f64>>(),
         forceatlas2::Settings{strong_gravity: true , ..Default::default()},
     );
 
@@ -239,7 +247,7 @@ fn convert_graph_to_coordinates(graph: &Graph, weights: Vec<f64>, iter:u32) -> V
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
 ///     let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
-///     let weights = gen_random_weights(graph.len(), 1.0, 3.0);
+///     let weights = gen_random_weights(graph.len(), 1, 3);
 ///     let mut partition = vec![0; graph.len()];
 ///
 ///     MultiLevelPartitioner {..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
@@ -253,6 +261,9 @@ fn convert_graph_to_coordinates(graph: &Graph, weights: Vec<f64>, iter:u32) -> V
 pub struct MultiLevelPartitioner {
     /// Number of ForceAtlas2 iterations to run on the coarsed graph to get generate co-ordinates for the graph
     pub fa2_iterations: u32,
+
+    /// Seed for MultiLevel Graph Partitioner
+    pub seed: Option<u64>,
 
     /// This indicates the number of times jetlp/jetrw combination should run without seeing
     /// any improvement before terminating the algorithm
@@ -280,7 +291,8 @@ impl Default for MultiLevelPartitioner {
     fn default() -> Self {
         MultiLevelPartitioner {
             fa2_iterations: 100,
-            jet_iterations: 4,
+            seed: None,
+            jet_iterations: 12,
             balance_factor: 0.1,
             jet_filter_ratio: 0.75,
             jet_tolerance_factor: 0.99,
@@ -288,14 +300,14 @@ impl Default for MultiLevelPartitioner {
     }
 }
 
-impl<'a> Partition<(Graph, &'a [f64])> for MultiLevelPartitioner {
+impl<'a> Partition<(Graph, &'a [i64])> for MultiLevelPartitioner {
     type Metadata = ();
     type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (Graph, &'a [f64]),
+        (adjacency, weights): (Graph, &'a [i64]),
     ) -> Result<Self::Metadata, Self::Error> {
 
         if part_ids.len() != weights.len() {
@@ -315,6 +327,7 @@ impl<'a> Partition<(Graph, &'a [f64])> for MultiLevelPartitioner {
             weights,
             adjacency,
             self.fa2_iterations,
+            self.seed,
             self.jet_iterations,
             self.balance_factor,
             self.jet_filter_ratio,
@@ -328,7 +341,7 @@ impl<'a> Partition<(Graph, &'a [f64])> for MultiLevelPartitioner {
 mod tests {
     use std::path::Path;
     use std::time::Instant;
-    use crate::gen_weights::gen_random_weights;
+    use crate::gen_weights::{gen_random_weights, gen_uniform_weights};
     use crate::io::read_matrix_market_as_graph;
     use super::*;
 
@@ -336,24 +349,24 @@ mod tests {
     fn test_3_node_heavy_edge_matching_coarse() {
         // Arrange
         let mut graph = Graph::new();
-        graph.insert(0, 1, 5.);
-        graph.insert(0, 2, 10.);
-        graph.insert(1, 2, 15.);
+        graph.insert(0, 1, 5);
+        graph.insert(0, 2, 10);
+        graph.insert(1, 2, 15);
 
-        graph.insert(1, 0, 5.);
-        graph.insert(2, 0, 10.);
-        graph.insert(2, 1, 15.);
+        graph.insert(1, 0, 5);
+        graph.insert(2, 0, 10);
+        graph.insert(2, 1, 15);
 
-        let weights = [3.0, 4.0, 5.0];
-        let seed = Some(5);
+        let weights = [3, 4, 5];
+        let mut rng = StdRng::seed_from_u64(5);
 
         // Act
-        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, seed, &weights);
+        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
 
 
         // Assert
-        assert_eq!(15., coarse_graph.get_edge_weight(0, 1).unwrap());
-        assert_eq!(15., coarse_graph.get_edge_weight(1, 0).unwrap());
+        assert_eq!(15, coarse_graph.get_edge_weight(0, 1).unwrap());
+        assert_eq!(15, coarse_graph.get_edge_weight(1, 0).unwrap());
 
         assert!(coarse_graph.get_edge_weight(0, 0).is_none());
         assert!(coarse_graph.get_edge_weight(1, 1).is_none());
@@ -361,41 +374,40 @@ mod tests {
         assert_eq!(vertex_mapping[0], vec![1, 2]);
         assert_eq!(vertex_mapping[1], vec![0]);
 
-        assert_eq!(weights_coarse_graph, vec![9.0, 3.0]);
+        assert_eq!(weights_coarse_graph, vec![9, 3]);
     }
 
     #[test]
     fn test_5_node_heavy_edge_matching_coarse() {
         // Arrange
         let mut graph = Graph::new();
-        graph.insert(0, 1, 3.);
-        graph.insert(1, 2, 5.);
-        graph.insert(2, 3, 4.);
-        graph.insert(3, 4, 6.);
-        graph.insert(4, 0, 10.);
+        graph.insert(0, 1, 3);
+        graph.insert(1, 2, 5);
+        graph.insert(2, 3, 4);
+        graph.insert(3, 4, 6);
+        graph.insert(4, 0, 10);
 
-        graph.insert(1, 0, 3.);
-        graph.insert(2, 1, 5.);
-        graph.insert(3, 2, 4.);
-        graph.insert(4, 3, 6.);
-        graph.insert(0, 4, 10.);
+        graph.insert(1, 0, 3);
+        graph.insert(2, 1, 5);
+        graph.insert(3, 2, 4);
+        graph.insert(4, 3, 6);
+        graph.insert(0, 4, 10);
 
-        let seed = Some(5);
-
-        let weights = [1.0, 2.0, 3.0, 4.0, 5.0];
+        let mut rng = StdRng::seed_from_u64(5);
+        let weights = [1, 2, 3, 4, 5];
 
         // Act
-        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, seed, &weights);
+        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
 
         // Assert
-        assert_eq!(6., coarse_graph.get_edge_weight(0, 1).unwrap());
-        assert_eq!(6., coarse_graph.get_edge_weight(1, 0).unwrap());
+        assert_eq!(6, coarse_graph.get_edge_weight(0, 1).unwrap());
+        assert_eq!(6, coarse_graph.get_edge_weight(1, 0).unwrap());
 
-        assert_eq!(3., coarse_graph.get_edge_weight(0, 2).unwrap());
-        assert_eq!(3., coarse_graph.get_edge_weight(2, 0).unwrap());
+        assert_eq!(3, coarse_graph.get_edge_weight(0, 2).unwrap());
+        assert_eq!(3, coarse_graph.get_edge_weight(2, 0).unwrap());
 
-        assert_eq!(5., coarse_graph.get_edge_weight(1, 2).unwrap());
-        assert_eq!(5., coarse_graph.get_edge_weight(2, 1).unwrap());
+        assert_eq!(5, coarse_graph.get_edge_weight(1, 2).unwrap());
+        assert_eq!(5, coarse_graph.get_edge_weight(2, 1).unwrap());
 
         assert!(coarse_graph.get_edge_weight(0, 0).is_none());
         assert!(coarse_graph.get_edge_weight(1, 1).is_none());
@@ -405,16 +417,16 @@ mod tests {
         assert_eq!(vertex_mapping[1], vec![2, 3]);
         assert_eq!(vertex_mapping[2], vec![1]);
 
-        assert_eq!(weights_coarse_graph, vec![6.0, 7.0, 2.0]);
+        assert_eq!(weights_coarse_graph, vec![6, 7, 2]);
     }
 
     #[test]
     fn test_partition_uncoarse() {
         // Arrange
         let vertex_mapping = vec![vec![0, 3], vec![2], vec![1]];
-        let weights_coarse_graph = [5.0, 7.0, 6.0];
+        let weights_coarse_graph = [5, 7, 6];
         let coarse_graph_partition = [1, 0, 0];
-        let weights_uncoarse_graph = [2.0, 6.0, 7.0, 3.0];
+        let weights_uncoarse_graph = [2, 6, 7, 3];
 
         // Act
         let uncoarsed_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mapping);

@@ -13,7 +13,7 @@ pub fn read_matrix_market_as_graph(file_path: &Path) -> Graph{
     }
 
     // Attempt to read the matrix market file as a TriMat with edge lengths as f64.
-    let tri_matrix_f64: Result<TriMatI<f64, usize>, _> = read_matrix_market(file_path);
+    let tri_matrix_f64: Result<TriMatI<i64, usize>, _> = read_matrix_market(file_path);
 
     match tri_matrix_f64 {
 
@@ -25,25 +25,7 @@ pub fn read_matrix_market_as_graph(file_path: &Path) -> Graph{
             }
         },
         Err(E) => {
-            // Read was unsuccessful, hence we try reading as a TriMat with edge lengths as i64.
-            let tri_matrix_i64: TriMatI<i64, usize> = read_matrix_market(file_path)
-                .expect("Failed to read matrix market file as both f64 and i64.");
-            let rows = tri_matrix_i64.rows();
-            let cols = tri_matrix_i64.cols();
-            let mut tri_matrix_f64 = TriMatI::new((rows, cols));
-            let iters = tri_matrix_i64.triplet_iter();
-            let row_indices = iters.clone().into_row_inds();
-            let col_indices = iters.clone().into_col_inds();
-            let data = iters.clone().into_data();
-
-            // Convert the edge lengths of TriMat from i64 to f64.
-            for ((row, col), value) in row_indices.zip(col_indices).zip(data) {
-                tri_matrix_f64.add_triplet(*row, *col, *value as f64);
-            }
-            // Convert to CSR and return it.
-            Graph {
-                graph_csr: tri_matrix_f64.to_csr(),
-            }
+            panic!("Error reading the matrix market file.");
         }
     }
 }
