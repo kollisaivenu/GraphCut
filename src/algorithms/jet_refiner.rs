@@ -58,6 +58,7 @@ fn jet_refiner(
         if imbalance_of_current_iter_partition < balance_factor {
             // the jetlp subroutine is used to generate a better partition
             moves = jetlp(&adjacency,
+                          num_of_partitions,
                           &partition_iter,
                           &vertex_connectivity_data_structure,
                           &locked_vertices,
@@ -116,22 +117,23 @@ fn jet_refiner(
     }
 }
 
-fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &Vec<Vec<i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
+fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_connectivity_data_structure: &Vec<Vec<i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
+    // Allocated only once so that it can be reused for every vertex.
+    let mut neighbors_eligible_partitions = Vec::with_capacity(2);
 
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
     let (partition_dest, gain): (Vec<usize>, Vec<Option<i64>>) = (0..graph.len()).map(|vertex| {
         let mut calculated_gain = None;
         let mut dest_partition = 0;
         if !locked_vertices[vertex] {
-            let mut neighbors_eligible_partitions = HashSet::new();
 
-            for (neighbor_vertex, _edge_weight) in graph.neighbors(vertex) {
-                if partition[neighbor_vertex] != partition[vertex] {
-                    neighbors_eligible_partitions.insert(partition[neighbor_vertex]);
+            neighbors_eligible_partitions.clear();
+
+            for part in 0..num_of_partitions {
+                if vertex_connectivity_data_structure[vertex][part] > 0 &&  part != partition[vertex]{
+                    neighbors_eligible_partitions.push(part);
                 }
             }
-
-            let neighbors_eligible_partitions: Vec<usize> = neighbors_eligible_partitions.into_iter().collect();
 
             if !neighbors_eligible_partitions.is_empty() {
                 dest_partition = get_most_connected_partition(
@@ -903,6 +905,7 @@ mod tests {
             &partitions,
              2);
         let moves = jetlp(&adjacency,
+                          2,
                           &partitions,
                           &vtx_conn_data_struct,
                           &locked_vertices,
