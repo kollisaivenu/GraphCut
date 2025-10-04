@@ -224,8 +224,11 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
 
     // Find out which the partitions are heavy (need to be downsized) and what partitions are light
     // (can act as valid destination partitions).
+    let mut partition_weights = vec![0.; num_partitions];
+
     for partition_id in 0..num_partitions{
         let weight_of_partition = get_weight_of_partition(partition_id, partitions, vertex_weights);
+        partition_weights[partition_id] = weight_of_partition;
 
         if max_weight_per_partitions < weight_of_partition {
             heavy_partitions.push(partition_id);
@@ -234,14 +237,6 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
         if max_weight_dest >= weight_of_partition {
             light_partitions.push(partition_id);
         }
-    }
-    let mut partition_weights = vec![0.; num_partitions];
-
-    // Precompute the weight of each partition.
-    for partition_id in 0..num_partitions{
-        partition_weights[partition_id] = get_weight_of_partition(partition_id,
-                                                                  partitions,
-                                                                  vertex_weights);
     }
 
     // Find out the loss for each eligible vertex move (from an overweight partition to an underweight partition).
