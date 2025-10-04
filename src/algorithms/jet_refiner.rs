@@ -51,6 +51,7 @@ fn jet_refiner(
 
     let mut imbalance_of_best_partition = imbalance(num_of_partitions, &partition, weights.into_iter().cloned());
     let mut best_partition_edge_cut = adjacency.edge_cut(&partition);
+    let mut curr_iter_partition_edge_cut = best_partition_edge_cut;
     let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.into_iter().cloned());
     let total_weight: i64 = weights.iter().cloned().sum();
     let mut random_num_gen;
@@ -97,10 +98,10 @@ fn jet_refiner(
         update_parts_and_vertex_connectivity(&adjacency,
                                              &mut partition_iter,
                                              &mut vertex_connectivity_data_structure,
-                                             moves);
+                                             moves,
+                                             &mut curr_iter_partition_edge_cut);
 
         imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.into_iter().cloned());
-        let curr_iter_partition_edge_cut = adjacency.edge_cut(&partition_iter);
 
         // Check if the current iteration partition is balance
         if  imbalance_of_current_iter_partition < balance_factor {
@@ -410,12 +411,15 @@ fn update_parts_and_vertex_connectivity(
     graph: &Graph,
     partition: &mut [usize],
     vertex_connectivity_data_structure: &mut Vec<Vec<i64>>,
-    moves: Vec<Move>) {
+    moves: Vec<Move>,
+    curr_iter_partition_edge_cut: &mut i64) {
     // Updates the partitions and the vertex connectivity data structure using the given list of moves.
 
     for single_move in &moves {
         let vertex = single_move.vertex;
         let partition_source = partition[vertex];
+
+        *curr_iter_partition_edge_cut += vertex_connectivity_data_structure[vertex][partition_source];
 
         for (neighbour_vertex, edge_weight) in graph.neighbors(vertex) {
             vertex_connectivity_data_structure[neighbour_vertex][partition_source] -= edge_weight;
@@ -427,6 +431,8 @@ fn update_parts_and_vertex_connectivity(
     for single_move in &moves {
         let vertex = single_move.vertex;
         let partition_dest = single_move.partition_id;
+
+        *curr_iter_partition_edge_cut -= vertex_connectivity_data_structure[vertex][partition_dest];
 
         for (neighbour_vertex, edge_weight) in graph.neighbors(vertex) {
             vertex_connectivity_data_structure[neighbour_vertex][partition_dest] += edge_weight;
@@ -751,6 +757,7 @@ mod tests {
         adjacency.insert(1, 3, 2);
 
         let mut partitions = [0, 0, 0, 0, 1, 1];
+        let mut edge_cut = adjacency.edge_cut(&partitions);
         let mut vtx_conn_data_struct = init_vertex_connectivity_data_structure(
             &adjacency,
             &partitions,
@@ -770,7 +777,8 @@ mod tests {
         update_parts_and_vertex_connectivity(&adjacency,
                                              &mut partitions,
                                              &mut vtx_conn_data_struct,
-                                             moves);
+                                             moves,
+                                             &mut edge_cut);
 
         // Assert
         assert_eq!(partitions[2], 1);
@@ -781,6 +789,7 @@ mod tests {
         assert_eq!(vtx_conn_data_struct[1][1], 2);
         assert_eq!(vtx_conn_data_struct[4][1], 4);
         assert_eq!(vtx_conn_data_struct[5][1], 4);
+        assert_eq!(edge_cut, 4);
     }
 
     #[test]
