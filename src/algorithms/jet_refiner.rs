@@ -6,12 +6,12 @@
 
 use crate::algorithms::Error;
 use crate::imbalance::imbalance;
-use std::collections::HashSet;
 use std::ops::{AddAssign, Neg, Sub, SubAssign};
 use num_traits::{Bounded, ToPrimitive, Zero};
 use rand::{thread_rng, Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rayon::prelude::*;
+use rustc_hash::FxHashSet;
 use crate::graph::Graph;
 
 #[derive(Debug)]
@@ -43,7 +43,7 @@ fn jet_refiner(
 
     let mut partition_iter = partition.to_vec();
     let mut current_iteration = 0;
-    let num_of_partitions = partition.iter().collect::<HashSet<_>>().len();
+    let num_of_partitions = partition.iter().collect::<FxHashSet<_>>().len();
     let mut vertex_connectivity_data_structure = init_vertex_connectivity_data_structure(&adjacency,
                                                                                                         partition,
                                                                                                         num_of_partitions);
@@ -183,7 +183,7 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
 
     // A heuristic attempt is made to approximate the true gain that would occur since
     // two positive moves when applied simultaneously can be detrimental.
-    let first_filter_eligible_vertices = first_filter_eligible_moves.clone().into_iter().collect::<HashSet<_>>();
+    let first_filter_eligible_vertices = first_filter_eligible_moves.clone().into_iter().collect::<FxHashSet<_>>();
     let gain2: Vec<i64> = (0..first_filter_eligible_moves.len()).map(|vertex_index|{
         let vertex = first_filter_eligible_moves[vertex_index];
         let mut gain_for_vertex = 0;
@@ -440,7 +440,7 @@ fn update_parts_and_vertex_connectivity(
     }
 }
 
-fn is_higher_placed(vertex1: usize, vertex2: usize, gain: &[Option<i64>], list_of_vertices: &HashSet<usize>) -> bool {
+fn is_higher_placed(vertex1: usize, vertex2: usize, gain: &[Option<i64>], list_of_vertices: &FxHashSet<usize>) -> bool {
     // Checks if vertex1 is better ranked than vertex2 (used in the vertex afterburner).
 
     if list_of_vertices.contains(&vertex1) && !gain[vertex1].is_none()
