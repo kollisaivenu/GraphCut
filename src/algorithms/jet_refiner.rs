@@ -9,7 +9,8 @@ use crate::imbalance::imbalance;
 use std::collections::HashSet;
 use std::ops::{AddAssign, Neg, Sub, SubAssign};
 use num_traits::{Bounded, ToPrimitive, Zero};
-use rand::{thread_rng, Rng};
+use rand::{thread_rng, Rng, SeedableRng};
+use rand::rngs::StdRng;
 use rayon::prelude::*;
 use crate::graph::Graph;
 
@@ -33,6 +34,7 @@ fn jet_refiner(
     balance_factor: f64,
     filter_ratio: f64,
     tolerance_factor: f64,
+    seed: Option<u64>
 ) {
 
     debug_assert!(!partition.is_empty());
@@ -51,6 +53,16 @@ fn jet_refiner(
     let mut best_partition_edge_cut = adjacency.edge_cut(&partition);
     let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.into_iter().cloned());
     let total_weight: i64 = weights.iter().cloned().sum();
+    let mut random_num_gen;
+
+    match seed {
+        Some(s) => {
+            random_num_gen = StdRng::seed_from_u64(s)
+        }
+        None => {
+            random_num_gen = StdRng::from_entropy()
+        }
+    }
 
     while current_iteration < iterations {
 
@@ -77,7 +89,8 @@ fn jet_refiner(
                           total_weight,
                           &vertex_connectivity_data_structure,
                           num_of_partitions,
-                          balance_factor);
+                          balance_factor,
+                          &mut random_num_gen);
         }
 
         // The moves from either jetlp or jetrw are applied on the current partition state.
@@ -194,7 +207,7 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
     non_negative_gain_filter(&first_filter_eligible_moves, &partition_dest, &gain2)
 }
 
-fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<Vec<i64>>, num_partitions: usize, balance_factor: f64) -> Vec<Move> {
+fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<Vec<i64>>, num_partitions: usize, balance_factor: f64, random_num_gen: &mut StdRng) -> Vec<Move> {
     let max_slots: usize = 25;
     let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_partitions as f64);
     let num_of_vertices = graph.len();
@@ -250,7 +263,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
                 &light_partitions);
 
             if adjacent_partitions.len() == 0{
-                dest_partition = light_partitions[thread_rng().gen_range(0..light_partitions.len())];
+                dest_partition = light_partitions[random_num_gen.gen_range(0..light_partitions.len())];
             } else {
                 dest_partition = get_most_connected_partition(vertex,
                                                               adjacent_partitions,
@@ -558,6 +571,7 @@ impl<'a> crate::Partition<(Graph, &'a [i64])> for JetRefiner {
             self.balance_factor,
             self.filter_ratio,
             self.tolerance_factor,
+            None
         );
         Ok(metadata)
     }
@@ -866,6 +880,7 @@ mod tests {
         let vtx_weights = [1, 4, 4, 1];
         let partitions = [0, 0, 0, 1];
         let total_weight = 10;
+        let mut random_num_gen = StdRng::from_entropy();
 
         // Act
         let vtx_conn_data_struct =
@@ -873,7 +888,8 @@ mod tests {
                 &adjacency,
                 &partitions,
                 2);
-        let moves = jetrw(&adjacency, &partitions, &vtx_weights, total_weight, &vtx_conn_data_struct, 2, 0.1);
+
+        let moves = jetrw(&adjacency, &partitions, &vtx_weights, total_weight, &vtx_conn_data_struct, 2, 0.1, &mut random_num_gen);
 
         // Assert
         assert_eq!(moves.len(), 2);
