@@ -7,6 +7,7 @@
 use crate::algorithms::Error;
 use crate::imbalance::imbalance;
 use std::ops::{AddAssign, Neg, Sub, SubAssign};
+use std::time::Instant;
 use num_traits::{Bounded, ToPrimitive, Zero};
 use rand::{thread_rng, Rng, SeedableRng};
 use rand::rngs::StdRng;
@@ -132,40 +133,31 @@ fn jet_refiner(
 }
 
 fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_connectivity_data_structure: &Vec<Vec<i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
-    // Allocated only once so that it can be reused for every vertex.
-    let mut neighbors_eligible_partitions = Vec::with_capacity(2);
 
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
-    let (partition_dest, gain): (Vec<usize>, Vec<Option<i64>>) = (0..graph.len()).map(|vertex| {
+    let (partition_dest, gain): (Vec<Option<usize>>, Vec<Option<i64>>) = (0..graph.len()).map(|vertex| {
         let mut calculated_gain = None;
-        let mut dest_partition = 0;
+        let mut dest_partition = None;
+
         if !locked_vertices[vertex] {
+            let mut connection_strength_dest = i64::MIN;
+            let mut connection_strength_source = 0;
 
-            neighbors_eligible_partitions.clear();
-
+            // Iterate over all partitions find out which partition is most connected to the vertex.
             for part in 0..num_of_partitions {
-                if vertex_connectivity_data_structure[vertex][part] > 0 &&  part != partition[vertex]{
-                    neighbors_eligible_partitions.push(part);
+                if part == partition[vertex] {
+                    connection_strength_source = vertex_connectivity_data_structure[vertex][part];
+                } else if vertex_connectivity_data_structure[vertex][part] > 0 &&  part != partition[vertex]{
+
+                    if vertex_connectivity_data_structure[vertex][part] > connection_strength_dest {
+                        connection_strength_dest = vertex_connectivity_data_structure[vertex][part];
+                        dest_partition = Some(part);
+                    }
                 }
             }
 
-            if !neighbors_eligible_partitions.is_empty() {
-                dest_partition = get_most_connected_partition(
-                    vertex,
-                    &neighbors_eligible_partitions,
-                    vertex_connectivity_data_structure,
-                );
-
-                calculated_gain = Some(conn(
-                    vertex,
-                    dest_partition,
-                    vertex_connectivity_data_structure,
-                ) - conn(
-                    vertex,
-                    partition[vertex],
-                    vertex_connectivity_data_structure,
-                ));
-
+            if !dest_partition.is_none() {
+                calculated_gain = Some(connection_strength_dest - connection_strength_source);
             }
         }
         (dest_partition, calculated_gain)
@@ -192,10 +184,10 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
             let mut partition_source = partition[neighbor_vertex];
 
             if is_higher_placed(neighbor_vertex, vertex, &gain, &first_filter_eligible_vertices) {
-                partition_source = partition_dest[neighbor_vertex];
+                partition_source = partition_dest[neighbor_vertex].unwrap();
             }
 
-            if partition_source == partition_dest[vertex] {
+            if partition_source == partition_dest[vertex].unwrap() {
                 gain_for_vertex += edge_weight;
             } else if partition_source == partition[vertex]{
                 gain_for_vertex -= edge_weight;
@@ -344,7 +336,7 @@ fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: 
 }
 
 fn non_negative_gain_filter(first_filter_eligible_moves: &[usize],
-                            partition_dest: &[usize],
+                            partition_dest: &[Option<usize>],
                             gain: &Vec<i64>) -> Vec<Move> {
     // Gets the list of moves that have positive gain after the first filter is applied.
     let mut list_of_moves: Vec<Move> = Vec::new();
@@ -353,7 +345,7 @@ fn non_negative_gain_filter(first_filter_eligible_moves: &[usize],
 
         if gain[vertex_index] > 0 {
             let vertex = first_filter_eligible_moves[vertex_index];
-            list_of_moves.push(Move{vertex: vertex, partition_id: partition_dest[vertex]});
+            list_of_moves.push(Move{vertex: vertex, partition_id: partition_dest[vertex].unwrap()});
         }
     }
 
@@ -391,7 +383,7 @@ fn init_vertex_connectivity_data_structure(graph: &Graph,
                                            partition: &[usize],
                                            num_partitions: usize) -> Vec<Vec<i64>> {
     // Initialize the vertex connectivity data structure.
-
+    // -1 indicates vertex is not connected with that partition
     let mut vertex_connectivity_data_structure = vec![vec![0; num_partitions]; partition.len()];
 
     let num_of_vertices = graph.len();
@@ -687,7 +679,7 @@ mod tests {
         // Arrange
         let gain = vec![3, 2, -1];
         let eligible_vertices_to_move = [0, 1, 2];
-        let partition_dest  = [1, 0, 1];
+        let partition_dest  = [Some(1), Some(0), Some(1)];
 
         // Act
         let moves = non_negative_gain_filter(
