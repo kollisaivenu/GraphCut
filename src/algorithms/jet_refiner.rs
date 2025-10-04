@@ -579,6 +579,9 @@ impl<'a> crate::Partition<(Graph, &'a [i64])> for JetRefiner {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+    use crate::gen_weights::gen_uniform_weights;
+    use crate::io::read_matrix_market_as_graph;
     use super::*;
 
     #[test]
@@ -931,5 +934,18 @@ mod tests {
         assert_eq!(moves.len(), 1);
         assert_eq!(moves[0].vertex, 0);
         assert_eq!(moves[0].partition_id, 1);
+    }
+
+    #[test]
+    fn test_vt2010() {
+        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
+        let weights = gen_uniform_weights(graph.len());
+        let mut rng = StdRng::seed_from_u64(5);
+        let mut partition: Vec<usize> = (0..graph.len())
+            .map(|_| rng.gen_range(0..2))
+            .collect();
+
+        jet_refiner(&mut partition, &weights, graph.clone(), 12, 0.1, 0.75, 0.99, Some(5));
+        assert_eq!(graph.edge_cut(&partition), 716134001);
     }
 }
