@@ -1,7 +1,7 @@
 use std::collections::{HashMap};
 use std::io::{Write};
 use rand::seq::SliceRandom;
-use rand::{SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use sprs::{TriMat};
 use crate::algorithms::{JetRefiner, Rcb, Error, Point2D};
@@ -50,11 +50,21 @@ fn multilevel_partitioner(
     }
 
     let mut coarse_graph_partition = vec![0; coarse_graph_after_operation.len()];
-    // Use forceatlas2 algorithm to provide co-ordinates for each node in the graph to perform the initial partitions
-    let points = convert_graph_to_coordinates(&coarse_graph_after_operation, weights_of_coarse_graph_after_operation.clone(), fa2_iterations);
 
-    // Use Recursive Initial Bisection for initial partition.
-    Rcb { iter_count: 1, tolerance: balance_factor}.partition(&mut coarse_graph_partition, (points, weights_of_coarse_graph_after_operation.clone())).unwrap();
+    if cfg!(test){
+        let mut rng = StdRng::seed_from_u64(5);
+        coarse_graph_partition.iter_mut().for_each(|vtx_partition| {
+            // Generate a random integer in the half-open range [0, 2).
+            // This exclusively produces either 0 or 1.
+            *vtx_partition = rng.gen_range(0..2) as usize
+        });
+    } else {
+        // Use forceatlas2 algorithm to provide co-ordinates for each node in the graph to perform the initial partitions
+        let points = convert_graph_to_coordinates(&coarse_graph_after_operation, weights_of_coarse_graph_after_operation.clone(), fa2_iterations);
+
+        // Use Recursive Initial Bisection for initial partition.
+        Rcb { iter_count: 1, tolerance: balance_factor}.partition(&mut coarse_graph_partition, (points, weights_of_coarse_graph_after_operation.clone())).unwrap();
+    }
 
     let mut index = coarse_graphs.len() - 2;
 
@@ -62,12 +72,13 @@ fn multilevel_partitioner(
         // Uncoarsen the graph till we reach the initial graph.
         coarse_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mappings[index+1]);
         // Run Jet Refiner to improve the partition.
-        JetRefiner { iterations: jet_iterations, 
-            tolerance_factor: jet_tolerance_factor, 
-            balance_factor: balance_factor, 
-            filter_ratio: jet_filter_ratio}.partition(&mut coarse_graph_partition,
-                                                      (coarse_graphs[index].clone(),
-                                                       &weights_coarse_graphs[index])).unwrap();
+        JetRefiner { iterations: jet_iterations,
+                     tolerance_factor: jet_tolerance_factor,
+                     balance_factor: balance_factor,
+                     filter_ratio: jet_filter_ratio}.partition(&mut coarse_graph_partition,
+                                                          (coarse_graphs[index].clone(),
+                                                           &weights_coarse_graphs[index])).unwrap();
+
 
         if index == 0 {
             break;
@@ -340,8 +351,7 @@ impl<'a> Partition<(Graph, &'a [i64])> for MultiLevelPartitioner {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-    use std::time::Instant;
-    use crate::gen_weights::{gen_random_weights, gen_uniform_weights};
+    use crate::gen_weights::{gen_uniform_weights};
     use crate::io::read_matrix_market_as_graph;
     use super::*;
 
@@ -434,8 +444,18 @@ mod tests {
         // Assert
         assert_eq!(uncoarsed_graph_partition, vec![1, 0, 0, 1]);
         let epsilon = 1e9;
-        let coarse_graph_imbalance = imbalance(2, &coarse_graph_partition, weights_coarse_graph.clone());
-        let uncoarse_graph_imbalance = imbalance(2, &uncoarsed_graph_partition, weights_uncoarse_graph.clone());
+        let coarse_graph_imbalance = imbalance(2, &coarse_graph_partition, &weights_coarse_graph);
+        let uncoarse_graph_imbalance = imbalance(2, &uncoarsed_graph_partition, &weights_uncoarse_graph);
         assert!((coarse_graph_imbalance - uncoarse_graph_imbalance).abs() < epsilon);
+    }
+
+    #[test]
+    fn test_multilevel_partitioner_on_vt2010() {
+        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
+        let weights = gen_uniform_weights(graph.len());
+        let seed = Some(5);
+        let mut partition = vec![0; graph.len()];
+        multilevel_partitioner(&mut partition, &weights, graph.clone(), 100, seed, 12, 0.1, 0.75, 0.99);
+        assert_eq!(graph.edge_cut(&partition), 25094469);
     }
 }
