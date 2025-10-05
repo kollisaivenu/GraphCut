@@ -13,13 +13,11 @@ use std::ops::AddAssign;
 use std::ops::Div;
 use std::ops::Sub;
 
-// Calculates the total weight for each part of a given partition.
-pub fn compute_parts_load<W>(partition: &[usize], num_parts: usize, weights: W) -> Vec<W::Item>
+/// Calculates the total weight for each part of a given partition.
+pub fn compute_parts_load(partition: &[usize], num_parts: usize, weights: &[i64]) -> Vec<i64>
 where
-    W: IntoIterator,
-    W::Item: Zero + Clone + AddAssign,
 {
-    let mut loads = vec![W::Item::zero(); num_parts];
+    let mut loads = vec![0; num_parts];
 
     for (&part, w) in partition.iter().zip(weights.into_iter()) {
         if part < num_parts {
@@ -29,22 +27,9 @@ where
 
     loads
 }
-
-/// Compute the imbalance of the given partition.
-pub fn imbalance<W>(num_parts: usize, partition: &[usize], weights: W) -> f64
-where
-    W: IntoIterator,
-    W::Item: Clone + PartialOrd + PartialEq,
-    W::Item: Zero + FromPrimitive + ToPrimitive,
-    W::Item: AddAssign + Div<Output = W::Item> + Sub<Output = W::Item> + Sum,
-{
-    if num_parts == 0 {
-        return 0.0;
-    }
-
-    let part_loads = compute_parts_load(partition, num_parts, weights);
-
-    let total_weight: W::Item = part_loads.iter().cloned().sum();
+/// Compute imbalance after passing part loads.
+pub fn compute_imbalance_from_part_loads(num_parts: usize, part_loads: &Vec<i64>) -> f64 {
+    let total_weight:i64 = part_loads.iter().cloned().sum();
 
     let ideal_part_weight = total_weight.to_f64().unwrap_or(0.0) / num_parts.to_f64().unwrap_or(1.0);
     if ideal_part_weight == 0.0 {
@@ -61,6 +46,16 @@ where
 
     max_deviation
 }
+/// Compute the imbalance of the given partition.
+pub fn imbalance(num_parts: usize, partition: &[usize], weights: &[i64]) -> f64 {
+    if num_parts == 0 {
+        return 0.0;
+    }
+
+    let part_loads = compute_parts_load(partition, num_parts, weights);
+
+    compute_imbalance_from_part_loads(num_parts, &part_loads)
+}
 
 #[cfg(test)]
 mod tests {
@@ -72,25 +67,25 @@ mod tests {
     fn test_compute_parts_load() {
         // Arrange
         let partition = [0, 0, 1, 1];
-        let vtx_weights = [4.0, 7.0, 5.0, 2.0];
+        let vtx_weights = vec![4, 7, 5, 2];
         let num_parts = 2;
 
         // Act
-        let partition_weights = compute_parts_load(&partition, num_parts, vtx_weights);
+        let partition_weights = compute_parts_load(&partition, num_parts, &vtx_weights);
 
         // Assert
-        assert_equal(partition_weights, [11.0, 7.0]);
+        assert_equal(partition_weights, [11, 7]);
     }
 
     #[test]
     fn test_imbalance() {
         // Arrange
         let partition = [0, 0, 1, 1];
-        let vtx_weights = [3.0, 3.0, 2.0, 2.0];
+        let vtx_weights = vec![3, 3, 2, 2];
         let num_parts = 2;
 
         // Act
-        let imb = imbalance(num_parts, &partition, vtx_weights);
+        let imb = imbalance(num_parts, &partition, &vtx_weights);
 
         // Assert
         assert_ulps_eq!(imb, 0.2);
