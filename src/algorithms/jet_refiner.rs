@@ -5,7 +5,7 @@
 // SIAM Journal on Scientific Computing 46.5 (2024): B700-B724.
 
 use crate::algorithms::Error;
-use crate::imbalance::imbalance;
+use crate::imbalance::{compute_imbalance_from_part_loads, compute_parts_load, imbalance};
 use std::ops::{AddAssign, Neg, Sub, SubAssign};
 use std::time::Instant;
 use num_traits::{Bounded, ToPrimitive, Zero};
@@ -50,10 +50,11 @@ fn jet_refiner(
                                                                                                         num_of_partitions);
     let mut locked_vertices = vec![false; adjacency.len()];
 
-    let mut imbalance_of_best_partition = imbalance(num_of_partitions, &partition, weights.into_iter().cloned());
+    let mut imbalance_of_best_partition = imbalance(num_of_partitions, &partition, &weights);
     let mut best_partition_edge_cut = adjacency.edge_cut(&partition);
     let mut curr_iter_partition_edge_cut = best_partition_edge_cut;
-    let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.into_iter().cloned());
+    let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, &weights);
+    let mut partition_weights = compute_parts_load(&partition, num_of_partitions, &weights);
     let total_weight: i64 = weights.iter().cloned().sum();
     let mut random_num_gen;
 
@@ -92,7 +93,8 @@ fn jet_refiner(
                           &vertex_connectivity_data_structure,
                           num_of_partitions,
                           balance_factor,
-                          &mut random_num_gen);
+                          &mut random_num_gen,
+                          &partition_weights);
         }
 
         // The moves from either jetlp or jetrw are applied on the current partition state.
@@ -100,9 +102,11 @@ fn jet_refiner(
                                              &mut partition_iter,
                                              &mut vertex_connectivity_data_structure,
                                              moves,
-                                             &mut curr_iter_partition_edge_cut);
+                                             &mut curr_iter_partition_edge_cut,
+                                             &mut partition_weights,
+                                             &weights);
 
-        imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, weights.into_iter().cloned());
+        imbalance_of_current_iter_partition = compute_imbalance_from_part_loads(num_of_partitions, &partition_weights);
 
         // Check if the current iteration partition is balance
         if  imbalance_of_current_iter_partition < balance_factor {
@@ -200,7 +204,7 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
     non_negative_gain_filter(&first_filter_eligible_moves, &partition_dest, &gain2)
 }
 
-fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<Vec<i64>>, num_partitions: usize, balance_factor: f64, random_num_gen: &mut StdRng) -> Vec<Move> {
+fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<Vec<i64>>, num_partitions: usize, balance_factor: f64, random_num_gen: &mut StdRng, partition_weights: &[i64]) -> Vec<Move> {
     let max_slots: usize = 25;
     let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_partitions as f64);
     let num_of_vertices = graph.len();
@@ -215,13 +219,8 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
         max_weight_dest = max_weight_per_partitions - 100f64;
     }
 
-    // Find out which the partitions are heavy (need to be downsized) and what partitions are light
-    // (can act as valid destination partitions).
-    let mut partition_weights = vec![0.; num_partitions];
-
     for partition_id in 0..num_partitions{
-        let weight_of_partition = get_weight_of_partition(partition_id, partitions, vertex_weights);
-        partition_weights[partition_id] = weight_of_partition;
+        let weight_of_partition = partition_weights[partition_id] as f64;
 
         if max_weight_per_partitions < weight_of_partition {
             heavy_partitions.push(partition_id);
@@ -404,7 +403,9 @@ fn update_parts_and_vertex_connectivity(
     partition: &mut [usize],
     vertex_connectivity_data_structure: &mut Vec<Vec<i64>>,
     moves: Vec<Move>,
-    curr_iter_partition_edge_cut: &mut i64) {
+    curr_iter_partition_edge_cut: &mut i64,
+    partition_weights: &mut [i64],
+    weights: &[i64]) {
     // Updates the partitions and the vertex connectivity data structure using the given list of moves.
 
     for single_move in &moves {
@@ -417,6 +418,8 @@ fn update_parts_and_vertex_connectivity(
             vertex_connectivity_data_structure[neighbour_vertex][partition_source] -= edge_weight;
         }
 
+        partition_weights[partition_source] -= weights[vertex];
+        partition_weights[single_move.partition_id] += weights[vertex];
         partition[vertex] = single_move.partition_id;
     }
 
@@ -749,6 +752,7 @@ mod tests {
         adjacency.insert(1, 3, 2);
 
         let mut partitions = [0, 0, 0, 0, 1, 1];
+        let vtx_weights = [1, 1, 1, 1, 1, 1];
         let mut edge_cut = adjacency.edge_cut(&partitions);
         let mut vtx_conn_data_struct = init_vertex_connectivity_data_structure(
             &adjacency,
@@ -764,13 +768,16 @@ mod tests {
                 partition_id: 1,
             }
         ];
+        let mut partition_weights = compute_parts_load(&partitions, 2, &vtx_weights);
 
         // Act
         update_parts_and_vertex_connectivity(&adjacency,
                                              &mut partitions,
                                              &mut vtx_conn_data_struct,
                                              moves,
-                                             &mut edge_cut);
+                                             &mut edge_cut,
+                                             &mut partition_weights,
+                                             &vtx_weights);
 
         // Assert
         assert_eq!(partitions[2], 1);
@@ -782,6 +789,8 @@ mod tests {
         assert_eq!(vtx_conn_data_struct[4][1], 4);
         assert_eq!(vtx_conn_data_struct[5][1], 4);
         assert_eq!(edge_cut, 4);
+        assert_eq!(2, partition_weights[0]);
+        assert_eq!(4, partition_weights[1]);
     }
 
     #[test]
@@ -880,6 +889,7 @@ mod tests {
         let partitions = [0, 0, 0, 1];
         let total_weight = 10;
         let mut random_num_gen = StdRng::from_entropy();
+        let mut partition_weights = compute_parts_load(&partitions, 2, &vtx_weights);
 
         // Act
         let vtx_conn_data_struct =
@@ -888,7 +898,7 @@ mod tests {
                 &partitions,
                 2);
 
-        let moves = jetrw(&adjacency, &partitions, &vtx_weights, total_weight, &vtx_conn_data_struct, 2, 0.1, &mut random_num_gen);
+        let moves = jetrw(&adjacency, &partitions, &vtx_weights, total_weight, &vtx_conn_data_struct, 2, 0.1, &mut random_num_gen, &partition_weights);
 
         // Assert
         assert_eq!(moves.len(), 2);
