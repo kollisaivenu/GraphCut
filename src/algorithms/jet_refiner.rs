@@ -7,9 +7,8 @@
 use crate::algorithms::Error;
 use crate::imbalance::{compute_imbalance_from_part_loads, compute_parts_load, imbalance};
 use std::ops::{AddAssign, Neg, Sub, SubAssign};
-use std::time::Instant;
 use num_traits::{Bounded, ToPrimitive, Zero};
-use rand::{thread_rng, Rng, SeedableRng};
+use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
@@ -46,14 +45,15 @@ fn jet_refiner(
     let mut current_iteration = 0;
     let num_of_partitions = partition.iter().collect::<FxHashSet<_>>().len();
     let mut vertex_connectivity_data_structure = init_vertex_connectivity_data_structure(&adjacency,
-                                                                                                        partition,
-                                                                                                        num_of_partitions);
+                                                                                                   partition,
+                                                                                                   num_of_partitions);
     let mut locked_vertices = vec![false; adjacency.len()];
 
     let mut imbalance_of_best_partition = imbalance(num_of_partitions, &partition, &weights);
+    let mut imbalance_of_current_iter_partition = imbalance_of_best_partition;
     let mut best_partition_edge_cut = adjacency.edge_cut(&partition);
     let mut curr_iter_partition_edge_cut = best_partition_edge_cut;
-    let mut imbalance_of_current_iter_partition = imbalance(num_of_partitions, &partition_iter, &weights);
+
     let mut partition_weights = compute_parts_load(&partition, num_of_partitions, &weights);
     let total_weight: i64 = weights.iter().cloned().sum();
     let mut random_num_gen;
@@ -101,6 +101,7 @@ fn jet_refiner(
         update_parts_and_vertex_connectivity(&adjacency,
                                              &mut partition_iter,
                                              &mut vertex_connectivity_data_structure,
+                                             num_of_partitions,
                                              moves,
                                              &mut curr_iter_partition_edge_cut,
                                              &mut partition_weights,
@@ -136,8 +137,9 @@ fn jet_refiner(
     }
 }
 
-fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_connectivity_data_structure: &Vec<Vec<i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
+fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_connectivity_data_structure: &Vec<i64>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
+
     let (partition_dest, gain): (Vec<Option<usize>>, Vec<Option<i64>>) = (0..graph.len()).map(|vertex| {
         let mut calculated_gain = None;
         let mut dest_partition = None;
@@ -145,11 +147,11 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
         if !locked_vertices[vertex] {
             let vertex_partition = partition[vertex];
             let mut connection_strength_dest = i64::MIN;
-            let connection_strength_source = vertex_connectivity_data_structure[vertex][vertex_partition];
+            let connection_strength_source = vertex_connectivity_data_structure[vertex*num_of_partitions+vertex_partition];
 
             // Iterate over all partitions find out which partition is most connected to the vertex.
             for part in 0..num_of_partitions {
-                let partition_connection = vertex_connectivity_data_structure[vertex][part];
+                let partition_connection = vertex_connectivity_data_structure[vertex*num_of_partitions+part];
 
                 if partition_connection > 0 &&  part != vertex_partition{
 
@@ -167,6 +169,8 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
         (dest_partition, calculated_gain)
     }).unzip();
 
+    //println!("not locked vertices {:?}", lv);
+    //println!("total vertices {:?}", graph.len());
     // First filter is applied to check which of the vertices are eligible for moving from one partition
     // to another. Either the gain should be positive or can be slightly negative (based on the filter ratio).
     // Slightly negative gain vertices are also considered in the hope that they could provide better global solutions
@@ -175,7 +179,8 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
         partition,
         &gain,
         vertex_connectivity_data_structure,
-        filter_ratio);
+        filter_ratio,
+        num_of_partitions);
 
     // A heuristic attempt is made to approximate the true gain that would occur since
     // two positive moves when applied simultaneously can be detrimental.
@@ -204,9 +209,9 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
     non_negative_gain_filter(&first_filter_eligible_moves, &partition_dest, &gain2)
 }
 
-fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<Vec<i64>>, num_partitions: usize, balance_factor: f64, random_num_gen: &mut StdRng, partition_weights: &[i64]) -> Vec<Move> {
+fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<i64>, num_of_partitions: usize, balance_factor: f64, random_num_gen: &mut StdRng, partition_weights: &[i64]) -> Vec<Move> {
     let max_slots: usize = 25;
-    let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_partitions as f64);
+    let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_of_partitions as f64);
     let num_of_vertices = graph.len();
     let mut heavy_partitions: Vec<usize> = Vec::new();
     let mut light_partitions: Vec<usize> = Vec::new();
@@ -219,7 +224,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
         max_weight_dest = max_weight_per_partitions - 100f64;
     }
 
-    for partition_id in 0..num_partitions{
+    for partition_id in 0..num_of_partitions{
         let weight_of_partition = partition_weights[partition_id] as f64;
 
         if max_weight_per_partitions < weight_of_partition {
@@ -236,7 +241,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
     let (partitions_dest, loss): (Vec<usize>, Vec<i64>) = (0..num_of_vertices).map(|vertex| {
         let weight_of_partition = partition_weights[partitions[vertex]];
 
-        let limit = 1.5*(weight_of_partition as f64 - ((total_weight as f64)/(num_partitions as f64)));
+        let limit = 1.5*(weight_of_partition as f64 - ((total_weight as f64)/(num_of_partitions as f64)));
 
         let mut calculated_loss = 0;
         let mut dest_partition: usize = 0;
@@ -254,14 +259,17 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
             } else {
                 dest_partition = get_most_connected_partition(vertex,
                                                               adjacent_partitions,
-                                                              vertex_connectivity_data_structure);
+                                                              vertex_connectivity_data_structure,
+                                                              num_of_partitions);
             }
             calculated_loss = conn(vertex,
                                    partitions[vertex],
-                                   vertex_connectivity_data_structure) -
+                                   vertex_connectivity_data_structure,
+                                   num_of_partitions) -
                 conn(vertex,
                      dest_partition,
-                     vertex_connectivity_data_structure);
+                     vertex_connectivity_data_structure,
+                     num_of_partitions);
         }
         (dest_partition, calculated_loss)
     }).unzip();
@@ -315,7 +323,7 @@ fn lock_vertices(moves: &Vec<Move>, locked_vertices: &mut [bool]) {
 
 }
 
-fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &Vec<Vec<i64>>, filter_ratio: f64) -> Vec<usize> {
+fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &Vec<i64>, filter_ratio: f64, num_of_partitions: usize) -> Vec<usize> {
     // Get a list of vertices that have a positive gain or slightly negative gain value (based on the filter ratio).
 
     let num_vertices = partitions.len();
@@ -326,7 +334,7 @@ fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: 
             &&
             !gain[vertex].is_none()
             &&
-            (gain[vertex].unwrap() > 0 || -gain[vertex].unwrap() < (filter_ratio * (conn(vertex, partitions[vertex], vertex_connectivity_data_structure) as f64)).floor() as i64){
+            (gain[vertex].unwrap() > 0 || -gain[vertex].unwrap() < (filter_ratio * (conn(vertex, partitions[vertex], vertex_connectivity_data_structure, num_of_partitions) as f64)).floor() as i64){
             list_of_moveable_vertices.push(vertex);
         }
     }
@@ -353,16 +361,18 @@ fn non_negative_gain_filter(first_filter_eligible_moves: &[usize],
 
 fn conn(vertex_id: usize,
         partition_id: usize,
-        vertex_connectivity_data_structure: &Vec<Vec<i64>>) ->i64 {
+        vertex_connectivity_data_structure: &Vec<i64>,
+        num_of_partitions: usize) ->i64 {
     // Gets how well a vertex is connected to a partition (adds all the edge weights connected to the partition).
 
-    vertex_connectivity_data_structure[vertex_id][partition_id]
+    vertex_connectivity_data_structure[vertex_id*num_of_partitions + partition_id]
 }
 
 fn get_most_connected_partition(
     vertex_id: usize,
     partition_ids: &[usize],
-    vertex_connectivity_data_structure: &Vec<Vec<i64>>) -> usize {
+    vertex_connectivity_data_structure: &Vec<i64>,
+    num_of_partitions: usize) -> usize {
     // Get the most connected partition to a particular vertex.
 
     let mut connections = i64::MIN;
@@ -370,8 +380,8 @@ fn get_most_connected_partition(
 
     for &partition_id in partition_ids {
 
-        if vertex_connectivity_data_structure[vertex_id][partition_id] > connections {
-            connections = vertex_connectivity_data_structure[vertex_id][partition_id];
+        if vertex_connectivity_data_structure[vertex_id*num_of_partitions + partition_id] > connections {
+            connections = vertex_connectivity_data_structure[vertex_id*num_of_partitions + partition_id];
             most_connected_partition = partition_id;
         }
     }
@@ -380,10 +390,10 @@ fn get_most_connected_partition(
 
 fn init_vertex_connectivity_data_structure(graph: &Graph,
                                            partition: &[usize],
-                                           num_partitions: usize) -> Vec<Vec<i64>> {
+                                           num_of_partitions: usize) -> Vec<i64> {
     // Initialize the vertex connectivity data structure.
     // -1 indicates vertex is not connected with that partition
-    let mut vertex_connectivity_data_structure = vec![vec![0; num_partitions]; partition.len()];
+    let mut vertex_connectivity_data_structure = vec![0; num_of_partitions*partition.len()];
 
     let num_of_vertices = graph.len();
 
@@ -391,7 +401,7 @@ fn init_vertex_connectivity_data_structure(graph: &Graph,
 
         let neighbours = graph.neighbors(vertex);
         for (neighbour_vertex, edge_weight) in neighbours {
-            vertex_connectivity_data_structure[vertex][partition[neighbour_vertex]] += edge_weight;
+            vertex_connectivity_data_structure[vertex*num_of_partitions + partition[neighbour_vertex]] += edge_weight;
         }
     }
 
@@ -401,7 +411,8 @@ fn init_vertex_connectivity_data_structure(graph: &Graph,
 fn update_parts_and_vertex_connectivity(
     graph: &Graph,
     partition: &mut [usize],
-    vertex_connectivity_data_structure: &mut Vec<Vec<i64>>,
+    vertex_connectivity_data_structure: &mut Vec<i64>,
+    num_of_partitions: usize,
     moves: Vec<Move>,
     curr_iter_partition_edge_cut: &mut i64,
     partition_weights: &mut [i64],
@@ -412,10 +423,10 @@ fn update_parts_and_vertex_connectivity(
         let vertex = single_move.vertex;
         let partition_source = partition[vertex];
 
-        *curr_iter_partition_edge_cut += vertex_connectivity_data_structure[vertex][partition_source];
+        *curr_iter_partition_edge_cut += vertex_connectivity_data_structure[vertex*num_of_partitions+partition_source];
 
         for (neighbour_vertex, edge_weight) in graph.neighbors(vertex) {
-            vertex_connectivity_data_structure[neighbour_vertex][partition_source] -= edge_weight;
+            vertex_connectivity_data_structure[neighbour_vertex*num_of_partitions + partition_source] -= edge_weight;
         }
 
         partition_weights[partition_source] -= weights[vertex];
@@ -427,10 +438,10 @@ fn update_parts_and_vertex_connectivity(
         let vertex = single_move.vertex;
         let partition_dest = single_move.partition_id;
 
-        *curr_iter_partition_edge_cut -= vertex_connectivity_data_structure[vertex][partition_dest];
+        *curr_iter_partition_edge_cut -= vertex_connectivity_data_structure[vertex*num_of_partitions+partition_dest];
 
         for (neighbour_vertex, edge_weight) in graph.neighbors(vertex) {
-            vertex_connectivity_data_structure[neighbour_vertex][partition_dest] += edge_weight;
+            vertex_connectivity_data_structure[neighbour_vertex*num_of_partitions+partition_dest] += edge_weight;
         }
     }
 }
@@ -618,8 +629,14 @@ mod tests {
             2);
 
         // Assert
-        assert_eq!(vtx_conn_data_struct[0][0], 3);
-        assert_eq!(vtx_conn_data_struct[0][1], 4);
+        assert_eq!(vtx_conn_data_struct[0], 3);
+        assert_eq!(vtx_conn_data_struct[1], 4);
+        assert_eq!(vtx_conn_data_struct[2], 2);
+        assert_eq!(vtx_conn_data_struct[3], 0);
+        assert_eq!(vtx_conn_data_struct[4], 1);
+        assert_eq!(vtx_conn_data_struct[5], 0);
+        assert_eq!(vtx_conn_data_struct[6], 4);
+        assert_eq!(vtx_conn_data_struct[7], 0);
 
     }
 
@@ -644,7 +661,8 @@ mod tests {
         let most_connected_partition = get_most_connected_partition(
             0,
             &partition,
-            &vtx_conn_data_struct);
+            &vtx_conn_data_struct,
+        2);
 
         // Assert
         assert_eq!(most_connected_partition, 1);
@@ -660,16 +678,17 @@ mod tests {
         adjacency.insert(1, 0, 2);
         adjacency.insert(2, 0, 1);
         adjacency.insert(3, 0, 4);
+        let num_of_partitions = 2;
 
         let partition = [0, 0, 0, 1];
         let vtx_conn_data_struct = init_vertex_connectivity_data_structure(
             &adjacency,
             &partition,
-            2);
+            num_of_partitions);
 
         // Act
-        let conn_strength_part_0 = conn(0, 0, &vtx_conn_data_struct);
-        let conn_strength_part_1 = conn(0, 1, &vtx_conn_data_struct);
+        let conn_strength_part_0 = conn(0, 0, &vtx_conn_data_struct, num_of_partitions);
+        let conn_strength_part_1 = conn(0, 1, &vtx_conn_data_struct, num_of_partitions);
 
         // Assert
         assert_eq!(conn_strength_part_0, 3);
@@ -710,10 +729,11 @@ mod tests {
         adjacency.insert(3, 0, 4);
 
         let partitions = [0, 0, 0, 1];
+        let num_of_partitions = 2;
         let vtx_conn_data_struct = init_vertex_connectivity_data_structure(
             &adjacency,
             &partitions,
-            2);
+            num_of_partitions);
         let gain = [Some(-1), Some(2), Some(-2), Some(-2)];
         let filter_ratio = 0.75;
         let mut locked_vertices = [false; 4];
@@ -726,7 +746,8 @@ mod tests {
             &partitions,
             &gain,
             &vtx_conn_data_struct,
-            filter_ratio);
+            filter_ratio,
+            num_of_partitions);
 
         // Assert
         assert_eq!(eligible_vertices_to_move.len(), 2);
@@ -750,7 +771,7 @@ mod tests {
         adjacency.insert(5, 4, 1);
         adjacency.insert(3, 5, 3);
         adjacency.insert(1, 3, 2);
-
+        let num_of_partitions = 2;
         let mut partitions = [0, 0, 0, 0, 1, 1];
         let vtx_weights = [1, 1, 1, 1, 1, 1];
         let mut edge_cut = adjacency.edge_cut(&partitions);
@@ -774,6 +795,7 @@ mod tests {
         update_parts_and_vertex_connectivity(&adjacency,
                                              &mut partitions,
                                              &mut vtx_conn_data_struct,
+                                             num_of_partitions,
                                              moves,
                                              &mut edge_cut,
                                              &mut partition_weights,
@@ -782,12 +804,18 @@ mod tests {
         // Assert
         assert_eq!(partitions[2], 1);
         assert_eq!(partitions[3], 1);
-        assert_eq!(vtx_conn_data_struct[0][0], 1);
-        assert_eq!(vtx_conn_data_struct[0][1], 2);
-        assert_eq!(vtx_conn_data_struct[1][0], 1);
-        assert_eq!(vtx_conn_data_struct[1][1], 2);
-        assert_eq!(vtx_conn_data_struct[4][1], 4);
-        assert_eq!(vtx_conn_data_struct[5][1], 4);
+        assert_eq!(vtx_conn_data_struct[0], 1);
+        assert_eq!(vtx_conn_data_struct[1], 2);
+        assert_eq!(vtx_conn_data_struct[2], 1);
+        assert_eq!(vtx_conn_data_struct[3], 2);
+        assert_eq!(vtx_conn_data_struct[4], 2);
+        assert_eq!(vtx_conn_data_struct[5], 3);
+        assert_eq!(vtx_conn_data_struct[6], 2);
+        assert_eq!(vtx_conn_data_struct[7], 3);
+        assert_eq!(vtx_conn_data_struct[8], 0);
+        assert_eq!(vtx_conn_data_struct[9], 4);
+        assert_eq!(vtx_conn_data_struct[10], 0);
+        assert_eq!(vtx_conn_data_struct[11], 4);
         assert_eq!(edge_cut, 4);
         assert_eq!(2, partition_weights[0]);
         assert_eq!(4, partition_weights[1]);
