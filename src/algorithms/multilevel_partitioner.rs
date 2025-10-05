@@ -1,8 +1,8 @@
-use std::collections::{HashMap};
 use std::io::{Write};
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand::rngs::StdRng;
+use rustc_hash::FxHashMap;
 use sprs::{TriMat};
 use crate::algorithms::{JetRefiner, Rcb, Error, Point2D};
 use crate::{Partition};
@@ -149,7 +149,7 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
     // Eg. If vertex 0 is connected to vertex 2 and vertex 3 which is merged into vertex 1 in the
     // coarse graph, then in the coarse graph vertex 0 will be connected to vertex 1 with
     // an edge length that is tge sum of vertex 0 and vertex 2 and vertex 0 and vertex 3
-    let mut edge_to_weight_mapping = HashMap::with_capacity(num_of_edges);
+    let mut edge_to_weight_mapping = FxHashMap::with_capacity_and_hasher(num_of_edges, Default::default());
 
     for vertex in 0..graph.len() {
         for (neighbor, edge_weight) in graph.neighbors(vertex){
