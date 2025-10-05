@@ -137,24 +137,24 @@ fn jet_refiner(
 }
 
 fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_connectivity_data_structure: &Vec<Vec<i64>>, locked_vertices: &[bool], filter_ratio: f64) -> Vec<Move> {
-
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
     let (partition_dest, gain): (Vec<Option<usize>>, Vec<Option<i64>>) = (0..graph.len()).map(|vertex| {
         let mut calculated_gain = None;
         let mut dest_partition = None;
 
         if !locked_vertices[vertex] {
+            let vertex_partition = partition[vertex];
             let mut connection_strength_dest = i64::MIN;
-            let mut connection_strength_source = 0;
+            let connection_strength_source = vertex_connectivity_data_structure[vertex][vertex_partition];
 
             // Iterate over all partitions find out which partition is most connected to the vertex.
             for part in 0..num_of_partitions {
-                if part == partition[vertex] {
-                    connection_strength_source = vertex_connectivity_data_structure[vertex][part];
-                } else if vertex_connectivity_data_structure[vertex][part] > 0 &&  part != partition[vertex]{
+                let partition_connection = vertex_connectivity_data_structure[vertex][part];
 
-                    if vertex_connectivity_data_structure[vertex][part] > connection_strength_dest {
-                        connection_strength_dest = vertex_connectivity_data_structure[vertex][part];
+                if partition_connection > 0 &&  part != vertex_partition{
+
+                    if partition_connection > connection_strength_dest {
+                        connection_strength_dest = partition_connection;
                         dest_partition = Some(part);
                     }
                 }
