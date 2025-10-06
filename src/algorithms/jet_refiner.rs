@@ -9,7 +9,7 @@ use crate::imbalance::{compute_imbalance_from_part_loads, compute_parts_load, im
 use std::ops::{AddAssign, Neg, Sub, SubAssign};
 use num_traits::{Bounded, ToPrimitive, Zero};
 use rand::{Rng, SeedableRng};
-use rand::rngs::StdRng;
+use rand::rngs::SmallRng;
 use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use crate::graph::Graph;
@@ -60,10 +60,10 @@ fn jet_refiner(
 
     match seed {
         Some(s) => {
-            random_num_gen = StdRng::seed_from_u64(s)
+            random_num_gen = SmallRng::seed_from_u64(s)
         }
         None => {
-            random_num_gen = StdRng::from_entropy()
+            random_num_gen = SmallRng::from_entropy()
         }
     }
 
@@ -209,7 +209,7 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
     non_negative_gain_filter(&first_filter_eligible_moves, &partition_dest, &gain2)
 }
 
-fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<i64>, num_of_partitions: usize, balance_factor: f64, random_num_gen: &mut StdRng, partition_weights: &[i64]) -> Vec<Move> {
+fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<i64>, num_of_partitions: usize, balance_factor: f64, random_num_gen: &mut SmallRng, partition_weights: &[i64]) -> Vec<Move> {
     let max_slots: usize = 25;
     let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_of_partitions as f64);
     let num_of_vertices = graph.len();
@@ -916,7 +916,7 @@ mod tests {
         let vtx_weights = [1, 4, 4, 1];
         let partitions = [0, 0, 0, 1];
         let total_weight = 10;
-        let mut random_num_gen = StdRng::from_entropy();
+        let mut random_num_gen = SmallRng::from_entropy();
         let mut partition_weights = compute_parts_load(&partitions, 2, &vtx_weights);
 
         // Act
@@ -974,12 +974,12 @@ mod tests {
     fn test_vt2010() {
         let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
         let weights = gen_uniform_weights(graph.len());
-        let mut rng = StdRng::seed_from_u64(5);
+        let mut rng = SmallRng::seed_from_u64(5);
         let mut partition: Vec<usize> = (0..graph.len())
             .map(|_| rng.gen_range(0..2))
             .collect();
 
         jet_refiner(&mut partition, &weights, graph.clone(), 12, 0.1, 0.75, 0.99, Some(5));
-        assert_eq!(graph.edge_cut(&partition), 716134001);
+        assert_eq!(graph.edge_cut(&partition), 334753684);
     }
 }

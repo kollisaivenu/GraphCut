@@ -1,7 +1,7 @@
 use std::io::{Write};
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
-use rand::rngs::StdRng;
+use rand::rngs::SmallRng;
 use rustc_hash::FxHashMap;
 use sprs::{TriMat};
 use crate::algorithms::{JetRefiner, Rcb, Error, Point2D};
@@ -29,8 +29,8 @@ fn multilevel_partitioner(
     let mut weights_of_coarse_graph_after_operation = weights.to_vec();
 
     let mut rng = match seed {
-        Some(seed) => StdRng::seed_from_u64(seed),
-        None => StdRng::from_entropy()
+        Some(seed) => SmallRng::seed_from_u64(seed),
+        None => SmallRng::from_entropy()
     };
 
     // Keep coarsening the graph until the graph has less than 100 nodes
@@ -52,7 +52,7 @@ fn multilevel_partitioner(
     let mut coarse_graph_partition = vec![0; coarse_graph_after_operation.len()];
 
     if cfg!(test){
-        let mut rng = StdRng::seed_from_u64(5);
+        let mut rng = SmallRng::seed_from_u64(5);
         coarse_graph_partition.iter_mut().for_each(|vtx_partition| {
             // Generate a random integer in the half-open range [0, 2).
             // This exclusively produces either 0 or 1.
@@ -91,7 +91,7 @@ fn multilevel_partitioner(
 }
 
 // This function coarsens the graph using heavy edge matching algorithm.
-fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) -> (Graph, Vec<usize>, Vec<i64>) {
+fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut SmallRng, weights: &[i64]) -> (Graph, Vec<usize>, Vec<i64>) {
 
     let mut matched_nodes = vec![0; graph.len()];
     let mut fine_vertex_to_coarse_vertex =  vec![0; graph.len()];
@@ -352,21 +352,21 @@ mod tests {
         graph.insert(2, 1, 15);
 
         let weights = [3, 4, 5];
-        let mut rng = StdRng::seed_from_u64(5);
+        let mut rng = SmallRng::seed_from_u64(5);
 
         // Act
         let (coarse_graph, fine_vertex_to_coarse_vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
 
         // Assert
-        assert_eq!(15, coarse_graph.get_edge_weight(0, 1).unwrap());
-        assert_eq!(15, coarse_graph.get_edge_weight(1, 0).unwrap());
+        assert_eq!(20, coarse_graph.get_edge_weight(0, 1).unwrap());
+        assert_eq!(20, coarse_graph.get_edge_weight(1, 0).unwrap());
 
         assert!(coarse_graph.get_edge_weight(0, 0).is_none());
         assert!(coarse_graph.get_edge_weight(1, 1).is_none());
 
-        assert_eq!(fine_vertex_to_coarse_vertex_mapping, vec![1, 0, 0]);
+        assert_eq!(fine_vertex_to_coarse_vertex_mapping, vec![0, 1, 0]);
 
-        assert_eq!(weights_coarse_graph, vec![9, 3]);
+        assert_eq!(weights_coarse_graph, vec![8, 4]);
     }
 
     #[test]
@@ -385,29 +385,29 @@ mod tests {
         graph.insert(4, 3, 6);
         graph.insert(0, 4, 10);
 
-        let mut rng = StdRng::seed_from_u64(5);
+        let mut rng = SmallRng::seed_from_u64(5);
         let weights = [1, 2, 3, 4, 5];
 
         // Act
         let (coarse_graph, fine_vertex_to_coarse_vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
 
         // Assert
-        assert_eq!(6, coarse_graph.get_edge_weight(0, 1).unwrap());
-        assert_eq!(6, coarse_graph.get_edge_weight(1, 0).unwrap());
+        assert_eq!(3, coarse_graph.get_edge_weight(0, 1).unwrap());
+        assert_eq!(3, coarse_graph.get_edge_weight(1, 0).unwrap());
 
-        assert_eq!(3, coarse_graph.get_edge_weight(0, 2).unwrap());
-        assert_eq!(3, coarse_graph.get_edge_weight(2, 0).unwrap());
+        assert_eq!(6, coarse_graph.get_edge_weight(0, 2).unwrap());
+        assert_eq!(6, coarse_graph.get_edge_weight(2, 0).unwrap());
 
-        assert_eq!(5, coarse_graph.get_edge_weight(1, 2).unwrap());
-        assert_eq!(5, coarse_graph.get_edge_weight(2, 1).unwrap());
+        assert_eq!(4, coarse_graph.get_edge_weight(1, 2).unwrap());
+        assert_eq!(4, coarse_graph.get_edge_weight(2, 1).unwrap());
 
         assert!(coarse_graph.get_edge_weight(0, 0).is_none());
         assert!(coarse_graph.get_edge_weight(1, 1).is_none());
         assert!(coarse_graph.get_edge_weight(2, 2).is_none());
 
-        assert_eq!(fine_vertex_to_coarse_vertex_mapping, vec![0, 2, 1, 1, 0]);
+        assert_eq!(fine_vertex_to_coarse_vertex_mapping, vec![0, 1, 1, 2, 0]);
 
-        assert_eq!(weights_coarse_graph, vec![6, 7, 2]);
+        assert_eq!(weights_coarse_graph, vec![6, 5, 4]);
     }
 
     #[test]
@@ -436,6 +436,6 @@ mod tests {
         let seed = Some(5);
         let mut partition = vec![0; graph.len()];
         multilevel_partitioner(&mut partition, &weights, graph.clone(), 100, seed, 12, 0.1, 0.75, 0.99);
-        assert_eq!(graph.edge_cut(&partition), 25094469);
+        assert_eq!(graph.edge_cut(&partition), 16198675);
     }
 }
