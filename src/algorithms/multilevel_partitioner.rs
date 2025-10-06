@@ -23,7 +23,7 @@ fn multilevel_partitioner(
 ) {
     let mut coarse_graph_after_operation = graph.clone();
     let mut coarse_graphs = Vec::new();
-    let mut vertex_mappings = Vec::new();
+    let mut fine_vertex_to_coarse_vertex_mappings = Vec::new();
     let mut weights_coarse_graphs = Vec::new();
 
     let mut weights_of_coarse_graph_after_operation = weights.to_vec();
@@ -36,7 +36,7 @@ fn multilevel_partitioner(
     // Keep coarsening the graph until the graph has less than 100 nodes
     while coarse_graph_after_operation.len() > 100  {
 
-        let (coarse_graph, vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, &mut rng, &weights_of_coarse_graph_after_operation);
+        let (coarse_graph, fine_vertex_to_coarse_vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, &mut rng, &weights_of_coarse_graph_after_operation);
         coarse_graph_after_operation = coarse_graph.clone();
         // Store the coarse graphs at every level
         coarse_graphs.push(coarse_graph);
@@ -45,7 +45,7 @@ fn multilevel_partitioner(
         // Store the node weights of every coarse graph at each level
         weights_coarse_graphs.push(weights_of_coarse_graph);
         // Store the vertex mapping (coarse node to finer nodes) of the coarse graph at each level.
-        vertex_mappings.push(vertex_mapping);
+        fine_vertex_to_coarse_vertex_mappings.push(fine_vertex_to_coarse_vertex_mapping);
 
     }
 
@@ -70,7 +70,7 @@ fn multilevel_partitioner(
 
     while index >= 0 {
         // Uncoarsen the graph till we reach the initial graph.
-        coarse_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mappings[index+1]);
+        coarse_graph_partition = partition_uncoarse(&coarse_graph_partition, &fine_vertex_to_coarse_vertex_mappings[index+1]);
         // Run Jet Refiner to improve the partition.
         JetRefiner { iterations: jet_iterations,
                      tolerance_factor: jet_tolerance_factor,
@@ -85,17 +85,16 @@ fn multilevel_partitioner(
         }
         index -= 1;
     }
-    let final_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mappings[0]);
+    let final_graph_partition = partition_uncoarse(&coarse_graph_partition, &fine_vertex_to_coarse_vertex_mappings[0]);
     // Copy over the final partition to the partition array which is passed as input.
     partition.copy_from_slice(&final_graph_partition);
 }
 
 // This function coarsens the graph using heavy edge matching algorithm.
-fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) -> (Graph, Vec<Vec<usize>>, Vec<i64>) {
+fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) -> (Graph, Vec<usize>, Vec<i64>) {
 
     let mut matched_nodes = vec![0; graph.len()];
-    let mut vertex_mapping = Vec::with_capacity(graph.len());
-    let mut old_vertex_to_new_vertex =  vec![0; graph.len()];
+    let mut fine_vertex_to_coarse_vertex =  vec![0; graph.len()];
 
     let mut vertices: Vec<usize> = (0..graph.len()).collect();
     vertices.shuffle(rng);
@@ -122,25 +121,18 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
         }
 
         if !heaviest_edge_connected_vertice.is_none() {
-            // After determining the most connected vertice, we merge the original vertice and
-            // its most connected vertice into "supervertex"
-            vertex_mapping.push(vec![vertex.min(heaviest_edge_connected_vertice.unwrap()),
-                                           vertex.max(heaviest_edge_connected_vertice.unwrap())]);
             // The original node and its most connected vertex are now considered matched.
             matched_nodes[vertex] = 1;
             matched_nodes[heaviest_edge_connected_vertice.unwrap()] = 1;
 
             // Map the original vertex to its vertex in the coarse graph
             // This will come in handy during the reconstruction of the coarse graph.
-            old_vertex_to_new_vertex[vertex] = super_vertex;
-            old_vertex_to_new_vertex[heaviest_edge_connected_vertice.unwrap()] = super_vertex;
+            fine_vertex_to_coarse_vertex[vertex] = super_vertex;
+            fine_vertex_to_coarse_vertex[heaviest_edge_connected_vertice.unwrap()] = super_vertex;
             num_of_edges -= 1;
         } else {
-            // This flow is for the scenario when a vertex has no vertex to merge with.
-            // (mostly because all of its neighbors are already matched)
-            vertex_mapping.push(vec![vertex]);
             matched_nodes[vertex] = 1;
-            old_vertex_to_new_vertex[vertex] = super_vertex;
+            fine_vertex_to_coarse_vertex[vertex] = super_vertex;
         }
         super_vertex += 1;
     }
@@ -154,8 +146,8 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
     for vertex in 0..graph.len() {
         for (neighbor, edge_weight) in graph.neighbors(vertex){
 
-            if old_vertex_to_new_vertex[vertex] != old_vertex_to_new_vertex[neighbor] {
-                let key = (old_vertex_to_new_vertex[vertex], old_vertex_to_new_vertex[neighbor]);
+            if fine_vertex_to_coarse_vertex[vertex] != fine_vertex_to_coarse_vertex[neighbor] {
+                let key = (fine_vertex_to_coarse_vertex[vertex], fine_vertex_to_coarse_vertex[neighbor]);
                 let total_edge_weight = edge_to_weight_mapping.entry(key).or_insert(0);
                 *total_edge_weight += edge_weight;
             }
@@ -178,34 +170,26 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut StdRng, weights: &[i64]) 
     // Construction of the weights array for the coarse graph.
     let mut weights_coarse_graph = vec![0; new_coarse_graph.len()];
 
-    for coarse_vertex in 0..vertex_mapping.len(){
-        for uncoarse_vertex in vertex_mapping[coarse_vertex].iter(){
-            weights_coarse_graph[coarse_vertex] += weights[*uncoarse_vertex];
-        }
+    // Determine the new weights of the vertices.
+    for vertex in 0..fine_vertex_to_coarse_vertex.len(){
+        weights_coarse_graph[fine_vertex_to_coarse_vertex[vertex]] += weights[vertex];
     }
 
-    (new_coarse_graph, vertex_mapping, weights_coarse_graph)
+    (new_coarse_graph, fine_vertex_to_coarse_vertex, weights_coarse_graph)
 }
 
 // Refines the partition from a coarse graph back to the original finer graph.
-fn partition_uncoarse(partition: &[usize], vertex_mapping: &Vec<Vec<usize>>) -> Vec<usize>{
+fn partition_uncoarse(partition: &[usize], fine_vertex_to_coarse_vertex_mapping: &Vec<usize>) -> Vec<usize>{
     // Calculate the number of vertices in the uncoarsed graph (1 up level)
-    let mut vertices = 0;
-    for mapped_vertices in vertex_mapping{
-        vertices += mapped_vertices.len();
-    }
+
 
     // Create a partition array for the uncoarsed graph (1 level up)
     // If vertex 1 and 2 of the uncoarsed graph were merged into vertex 0 in the coarsed graph
     // and it belonged to partition 0, then vertex 1 and 2 would belong to partition 0 in the uncoarsed graph.
-    let mut new_partition: Vec<usize> = vec![0; vertices];
+    let mut new_partition: Vec<usize> = vec![0; fine_vertex_to_coarse_vertex_mapping.len()];
 
-    for coarse_graph_vertice in 0..vertex_mapping.len(){
-        let vertex_partition = partition[coarse_graph_vertice];
-
-        for uncoarse_graph_vertice in &vertex_mapping[coarse_graph_vertice]{
-            new_partition[*uncoarse_graph_vertice] = vertex_partition;
-        }
+    for vertex in (0..fine_vertex_to_coarse_vertex_mapping.len()){
+        new_partition[vertex] = partition[fine_vertex_to_coarse_vertex_mapping[vertex]];
     }
 
     new_partition
@@ -371,8 +355,7 @@ mod tests {
         let mut rng = StdRng::seed_from_u64(5);
 
         // Act
-        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
-
+        let (coarse_graph, fine_vertex_to_coarse_vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
 
         // Assert
         assert_eq!(15, coarse_graph.get_edge_weight(0, 1).unwrap());
@@ -381,8 +364,7 @@ mod tests {
         assert!(coarse_graph.get_edge_weight(0, 0).is_none());
         assert!(coarse_graph.get_edge_weight(1, 1).is_none());
 
-        assert_eq!(vertex_mapping[0], vec![1, 2]);
-        assert_eq!(vertex_mapping[1], vec![0]);
+        assert_eq!(fine_vertex_to_coarse_vertex_mapping, vec![1, 0, 0]);
 
         assert_eq!(weights_coarse_graph, vec![9, 3]);
     }
@@ -407,7 +389,7 @@ mod tests {
         let weights = [1, 2, 3, 4, 5];
 
         // Act
-        let (coarse_graph, vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
+        let (coarse_graph, fine_vertex_to_coarse_vertex_mapping, weights_coarse_graph) = heavy_edge_matching_coarse(&graph, &mut rng, &weights);
 
         // Assert
         assert_eq!(6, coarse_graph.get_edge_weight(0, 1).unwrap());
@@ -423,9 +405,7 @@ mod tests {
         assert!(coarse_graph.get_edge_weight(1, 1).is_none());
         assert!(coarse_graph.get_edge_weight(2, 2).is_none());
 
-        assert_eq!(vertex_mapping[0], vec![0, 4]);
-        assert_eq!(vertex_mapping[1], vec![2, 3]);
-        assert_eq!(vertex_mapping[2], vec![1]);
+        assert_eq!(fine_vertex_to_coarse_vertex_mapping, vec![0, 2, 1, 1, 0]);
 
         assert_eq!(weights_coarse_graph, vec![6, 7, 2]);
     }
@@ -433,13 +413,13 @@ mod tests {
     #[test]
     fn test_partition_uncoarse() {
         // Arrange
-        let vertex_mapping = vec![vec![0, 3], vec![2], vec![1]];
+        let fine_vertex_to_coarse_vertex_mapping = vec![0, 2, 1, 0];
         let weights_coarse_graph = [5, 7, 6];
         let coarse_graph_partition = [1, 0, 0];
         let weights_uncoarse_graph = [2, 6, 7, 3];
 
         // Act
-        let uncoarsed_graph_partition = partition_uncoarse(&coarse_graph_partition, &vertex_mapping);
+        let uncoarsed_graph_partition = partition_uncoarse(&coarse_graph_partition, &fine_vertex_to_coarse_vertex_mapping);
 
         // Assert
         assert_eq!(uncoarsed_graph_partition, vec![1, 0, 0, 1]);
