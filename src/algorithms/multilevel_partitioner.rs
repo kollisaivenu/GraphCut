@@ -3,8 +3,10 @@ use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use rustc_hash::FxHashMap;
-use sprs::{TriMat};
-use crate::algorithms::{JetRefiner, Rcb, Error, Point2D};
+use sprs::{CsMat, CsMatBase, TriMat};
+use sprs::errors::StructureError;
+use sprs::visu::print_nnz_pattern;
+use crate::algorithms::{Error, JetRefiner, Greedy};
 use crate::{Partition};
 use crate::graph::Graph;
 use crate::imbalance::imbalance;
@@ -13,7 +15,7 @@ fn multilevel_partitioner(
     partition: &mut [usize],
     weights: &[i64],
     graph: Graph,
-    fa2_iterations: u32,
+    num_of_partitions: usize,
     seed: Option<u64>,
     jet_iterations: u32,
     balance_factor: f64,
@@ -59,14 +61,17 @@ fn multilevel_partitioner(
             *vtx_partition = rng.gen_range(0..2) as usize
         });
     } else {
-        // Use forceatlas2 algorithm to provide co-ordinates for each node in the graph to perform the initial partitions
-        let points = convert_graph_to_coordinates(&coarse_graph_after_operation, weights_of_coarse_graph_after_operation.clone(), fa2_iterations);
-
-        // Use Recursive Initial Bisection for initial partition.
-        Rcb { iter_count: 1, tolerance: balance_factor}.partition(&mut coarse_graph_partition, (points, weights_of_coarse_graph_after_operation.clone())).unwrap();
+        Greedy { part_count: num_of_partitions }.partition(&mut coarse_graph_partition, weights_of_coarse_graph_after_operation.clone()).unwrap();
     }
 
     let mut index = coarse_graphs.len() - 2;
+
+    JetRefiner { iterations: jet_iterations,
+        tolerance_factor: jet_tolerance_factor,
+        balance_factor,
+        filter_ratio: jet_filter_ratio}.partition(&mut coarse_graph_partition,
+                                      (coarse_graph_after_operation,
+                                       &weights_of_coarse_graph_after_operation)).unwrap();
 
     while index >= 0 {
         // Uncoarsen the graph till we reach the initial graph.
@@ -74,18 +79,25 @@ fn multilevel_partitioner(
         // Run Jet Refiner to improve the partition.
         JetRefiner { iterations: jet_iterations,
                      tolerance_factor: jet_tolerance_factor,
-                     balance_factor: balance_factor,
+                     balance_factor,
                      filter_ratio: jet_filter_ratio}.partition(&mut coarse_graph_partition,
                                                           (coarse_graphs[index].clone(),
                                                            &weights_coarse_graphs[index])).unwrap();
-
 
         if index == 0 {
             break;
         }
         index -= 1;
     }
-    let final_graph_partition = partition_uncoarse(&coarse_graph_partition, &fine_vertex_to_coarse_vertex_mappings[0]);
+    let mut final_graph_partition = partition_uncoarse(&coarse_graph_partition, &fine_vertex_to_coarse_vertex_mappings[0]);
+
+    JetRefiner { iterations: jet_iterations,
+        tolerance_factor: jet_tolerance_factor,
+        balance_factor,
+        filter_ratio: jet_filter_ratio}.partition(&mut final_graph_partition,
+                                                  (graph,
+                                                   &weights)).unwrap();
+
     // Copy over the final partition to the partition array which is passed as input.
     partition.copy_from_slice(&final_graph_partition);
 }
@@ -159,10 +171,8 @@ fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut SmallRng, weights: &[i64]
     let mut new_coarse_graph  = Graph::new();
     let mut triplet_matrix = TriMat::with_capacity((super_vertex, super_vertex), num_of_edges);
 
-    for key in edge_to_weight_mapping.keys(){
-        let(vertex1, vertex2) = *key;
-        let edge_weight = edge_to_weight_mapping.get(key).unwrap();
-        triplet_matrix.add_triplet(vertex1, vertex2, *edge_weight);
+    for (&(vertex1, vertex2), &weight) in edge_to_weight_mapping.iter(){
+       triplet_matrix.add_triplet(vertex1, vertex2, weight);
     }
 
     new_coarse_graph.graph_csr = triplet_matrix.to_csr();
@@ -195,36 +205,6 @@ fn partition_uncoarse(partition: &[usize], fine_vertex_to_coarse_vertex_mapping:
     new_partition
 }
 
-// This function computes 2D coordinates for graph nodes using forceatlas2 algorithm.
-fn convert_graph_to_coordinates(graph: &Graph, weights: Vec<i64>, iter:u32) -> Vec<Point2D> {
-    // Create a vector where the elements are in the structure ((vertex1, vertex2), edge_weight).
-    let mut edges = Vec::new();
-
-    for node in 0..graph.len() {
-        for (neighbor_node, edge_weight) in graph.neighbors(node) {
-            edges.push(((node, neighbor_node), edge_weight as f64));
-        }
-    }
-
-    // Run forceatlas2 for the graph to generate the coordinates.
-    let mut layout = forceatlas2::Layout::<f64, 2>::from_graph_with_degree_mass(
-        edges,
-        weights.iter().map(|&x| x as f64).collect::<Vec<f64>>(),
-        forceatlas2::Settings{strong_gravity: true , ..Default::default()},
-    );
-
-    // Run the iterations
-    for _ in 0..iter {
-        layout.iteration();
-    }
-
-    let mut points = Vec::with_capacity(graph.len());
-    for (_, node) in layout.nodes.iter().enumerate() {
-        points.push(Point2D::new(node.pos.x(), node.pos.y()));
-    }
-
-    points
-}
 /// Multilevel Partitioner
 ///
 /// An implementation of the Multilevel (Heavy Edge Matching && (Recursive Coordinate Bisection || Geometric Partitioner))
@@ -254,8 +234,8 @@ fn convert_graph_to_coordinates(graph: &Graph, weights: Vec<i64>, iter:u32) -> V
 
 #[derive(Debug, Clone, Copy)]
 pub struct MultiLevelPartitioner {
-    /// Number of ForceAtlas2 iterations to run on the coarsed graph to get generate co-ordinates for the graph
-    pub fa2_iterations: u32,
+    /// Number of partitions
+    pub num_of_partitions: usize,
 
     /// Seed for MultiLevel Graph Partitioner
     pub seed: Option<u64>,
@@ -285,7 +265,7 @@ pub struct MultiLevelPartitioner {
 impl Default for MultiLevelPartitioner {
     fn default() -> Self {
         MultiLevelPartitioner {
-            fa2_iterations: 100,
+            num_of_partitions: 2,
             seed: None,
             jet_iterations: 12,
             balance_factor: 0.1,
@@ -321,7 +301,7 @@ impl<'a> Partition<(Graph, &'a [i64])> for MultiLevelPartitioner {
             part_ids,
             weights,
             adjacency,
-            self.fa2_iterations,
+            self.num_of_partitions,
             self.seed,
             self.jet_iterations,
             self.balance_factor,
@@ -435,7 +415,7 @@ mod tests {
         let weights = gen_uniform_weights(graph.len());
         let seed = Some(5);
         let mut partition = vec![0; graph.len()];
-        multilevel_partitioner(&mut partition, &weights, graph.clone(), 100, seed, 12, 0.1, 0.75, 0.99);
-        assert_eq!(graph.edge_cut(&partition), 16198675);
+        multilevel_partitioner(&mut partition, &weights, graph.clone(), 2, seed, 12, 0.1, 0.75, 0.99);
+        assert_eq!(graph.edge_cut(&partition), 15623509);
     }
 }

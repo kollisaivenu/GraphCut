@@ -4,10 +4,10 @@ use std::fmt;
 mod jet_refiner;
 mod recursive_bisection;
 mod multilevel_partitioner;
+mod greedy;
 
 use jet_refiner::JetRefiner;
-use recursive_bisection::Rcb;
-use recursive_bisection::Point2D;
+use greedy::Greedy;
 pub use multilevel_partitioner::MultiLevelPartitioner;
 
 

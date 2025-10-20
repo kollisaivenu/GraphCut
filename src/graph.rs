@@ -102,11 +102,12 @@ impl Graph {
     }
 
     /// Clone the graph
-    pub fn clone(&self) ->Self {
+    pub fn clone(&self) -> Self {
         Self {
             graph_csr: self.graph_csr.clone()
         }
     }
+
 }
 
 

@@ -14,7 +14,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     MultiLevelPartitioner {jet_iterations: 12, jet_tolerance_factor: 0.999, ..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
     let elapsed_time = start.elapsed();
     let edge_cut = graph.edge_cut(&partition);
-    let imbalance_of_partition = imbalance(2, &partition, weights.clone());
+    let imbalance_of_partition = imbalance(2, &partition, &weights);
     println!("Edge cut {:?}", edge_cut);
     println!("Imbalance {:?}", imbalance_of_partition);
     println!("Execution time {:?}", elapsed_time);
