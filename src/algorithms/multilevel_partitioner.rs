@@ -23,12 +23,12 @@ fn multilevel_partitioner(
     jet_tolerance_factor: f64,
 
 ) {
-    let mut coarse_graph_after_operation = graph.clone();
+
     let mut coarse_graphs = Vec::new();
+    coarse_graphs.push(graph.clone());
     let mut fine_vertex_to_coarse_vertex_mappings = Vec::new();
     let mut weights_coarse_graphs = Vec::new();
-
-    let mut weights_of_coarse_graph_after_operation = weights.to_vec();
+    weights_coarse_graphs.push(weights.to_vec());
 
     let mut rng = match seed {
         Some(seed) => SmallRng::seed_from_u64(seed),
@@ -36,14 +36,11 @@ fn multilevel_partitioner(
     };
 
     // Keep coarsening the graph until the graph has less than 100 nodes
-    while coarse_graph_after_operation.len() > 100  {
+    while coarse_graphs.last().unwrap().len() > num_of_partitions.max(100)  {
 
-        let (coarse_graph, fine_vertex_to_coarse_vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(&coarse_graph_after_operation, &mut rng, &weights_of_coarse_graph_after_operation);
-        coarse_graph_after_operation = coarse_graph.clone();
+        let (coarse_graph, fine_vertex_to_coarse_vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(coarse_graphs.last().unwrap(), &mut rng, weights_coarse_graphs.last().unwrap());
         // Store the coarse graphs at every level
         coarse_graphs.push(coarse_graph);
-
-        weights_of_coarse_graph_after_operation = weights_of_coarse_graph.clone();
         // Store the node weights of every coarse graph at each level
         weights_coarse_graphs.push(weights_of_coarse_graph);
         // Store the vertex mapping (coarse node to finer nodes) of the coarse graph at each level.
@@ -51,7 +48,8 @@ fn multilevel_partitioner(
 
     }
 
-    let mut coarse_graph_partition = vec![0; coarse_graph_after_operation.len()];
+    //let mut coarse_graph_partition = vec![0; coarse_graph_after_operation.len()];
+    let mut coarse_graph_partition = vec![0; coarse_graphs.last().unwrap().len()];
 
     if cfg!(test){
         let mut rng = SmallRng::seed_from_u64(5);
@@ -61,45 +59,33 @@ fn multilevel_partitioner(
             *vtx_partition = rng.gen_range(0..2) as usize
         });
     } else {
-        Greedy { part_count: num_of_partitions }.partition(&mut coarse_graph_partition, weights_of_coarse_graph_after_operation.clone()).unwrap();
+        Greedy { part_count: num_of_partitions }.partition(&mut coarse_graph_partition, weights_coarse_graphs.last().unwrap().clone()).unwrap();
     }
 
-    let mut index = coarse_graphs.len() - 2;
-
-    JetRefiner { iterations: jet_iterations,
-        tolerance_factor: jet_tolerance_factor,
-        balance_factor,
-        filter_ratio: jet_filter_ratio}.partition(&mut coarse_graph_partition,
-                                      (coarse_graph_after_operation,
-                                       &weights_of_coarse_graph_after_operation)).unwrap();
+    let mut index = coarse_graphs.len() - 1;
 
     while index >= 0 {
-        // Uncoarsen the graph till we reach the initial graph.
-        coarse_graph_partition = partition_uncoarse(&coarse_graph_partition, &fine_vertex_to_coarse_vertex_mappings[index+1]);
+
         // Run Jet Refiner to improve the partition.
         JetRefiner { iterations: jet_iterations,
-                     tolerance_factor: jet_tolerance_factor,
-                     balance_factor,
-                     filter_ratio: jet_filter_ratio}.partition(&mut coarse_graph_partition,
-                                                          (coarse_graphs[index].clone(),
-                                                           &weights_coarse_graphs[index])).unwrap();
+            tolerance_factor: jet_tolerance_factor,
+            balance_factor,
+            filter_ratio: jet_filter_ratio}.partition(&mut coarse_graph_partition,
+                                                      (coarse_graphs[index].clone(),
+                                                       &weights_coarse_graphs[index])).unwrap();
 
-        if index == 0 {
+        // Uncoarsen the graph till we reach the initial graph.
+        if index > 0 {
+            coarse_graph_partition = partition_uncoarse(&coarse_graph_partition, &fine_vertex_to_coarse_vertex_mappings[index-1]);
+        } else {
             break;
         }
+
         index -= 1;
     }
-    let mut final_graph_partition = partition_uncoarse(&coarse_graph_partition, &fine_vertex_to_coarse_vertex_mappings[0]);
-
-    JetRefiner { iterations: jet_iterations,
-        tolerance_factor: jet_tolerance_factor,
-        balance_factor,
-        filter_ratio: jet_filter_ratio}.partition(&mut final_graph_partition,
-                                                  (graph,
-                                                   &weights)).unwrap();
 
     // Copy over the final partition to the partition array which is passed as input.
-    partition.copy_from_slice(&final_graph_partition);
+    partition.copy_from_slice(&coarse_graph_partition);
 }
 
 // This function coarsens the graph using heavy edge matching algorithm.
