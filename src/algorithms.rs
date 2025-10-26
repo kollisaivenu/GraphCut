@@ -2,7 +2,6 @@
 use std::fmt;
 
 mod jet_refiner;
-mod recursive_bisection;
 mod multilevel_partitioner;
 mod greedy;
 
