@@ -302,21 +302,25 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
     // For each of the heavy partitions, decide the vertices that can be moved from the
     // heavy partitions such that the increase in edge cut is minimized.
     for (index, &heavy_partition) in heavy_partitions.iter().enumerate(){
+        let mut is_still_heavy_partition = true;
         let mut m = 0f64;
-        let m_max = (get_weight_of_partition(
-            heavy_partition,
-            partitions,
-            vertex_weights) - max_weight_per_partitions);
+        let m_max = partition_weights[heavy_partition] as f64 - max_weight_per_partitions;
 
         for slot in 0..max_slots {
 
             for &vertex in &bucket[get_index_for_bucket(index, slot, max_slots)] {
-                //m = m + (vertex_weights[vertex]);
 
                 if m < m_max {
                     m = m + (vertex_weights[vertex] as f64);
                     moves.push(Move{vertex, partition_id: partitions_dest[vertex]});
+                } else {
+                    is_still_heavy_partition = false;
+                    break;
                 }
+            }
+
+            if !is_still_heavy_partition {
+                break;
             }
         }
     }
@@ -404,7 +408,6 @@ fn init_vertex_connectivity_data_structure(graph: &Graph,
                                            partition: &[usize],
                                            num_of_partitions: usize) -> Vec<i64>{
     // Initialize the vertex connectivity data structure.
-    // -1 indicates vertex is not connected with that partition
     let mut vertex_connectivity_data_structure = vec![0; num_of_partitions*partition.len()];
 
     let num_of_vertices = graph.len();
