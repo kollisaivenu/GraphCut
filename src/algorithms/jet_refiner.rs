@@ -30,6 +30,7 @@ fn jet_refiner(
     partition: &mut [usize],
     weights: &[i64],
     adjacency: Graph,
+    num_of_partitions: usize,
     iterations: u32,
     balance_factor: f64,
     filter_ratio: f64,
@@ -43,7 +44,6 @@ fn jet_refiner(
 
     let mut partition_iter = partition.to_vec();
     let mut current_iteration = 0;
-    let num_of_partitions = partition.iter().collect::<FxHashSet<_>>().len();
     let mut vertex_connectivity_data_structure = init_vertex_connectivity_data_structure(&adjacency,
                                                                                                    partition,
                                                                                                    num_of_partitions);
@@ -547,6 +547,9 @@ fn init_bucket(num_heavy_partitions: usize, max_slots: usize) -> Vec<Vec<usize>>
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct JetRefiner {
+    // Number of partitions
+    pub num_of_partitions: usize,
+
     // This indicates the number of times jetlp/jetrw combination should run without seeing
     // any improvement before terminating the algorithm
     pub iterations: u32,
@@ -594,6 +597,7 @@ impl<'a> crate::Partition<(Graph, &'a [i64])> for JetRefiner {
             part_ids,
             weights,
             adjacency,
+            self.num_of_partitions,
             self.iterations,
             self.balance_factor,
             self.filter_ratio,
@@ -1009,7 +1013,7 @@ mod tests {
             .map(|_| rng.gen_range(0..2))
             .collect();
 
-        jet_refiner(&mut partition, &weights, graph.clone(), 12, 0.1, 0.75, 0.99, Some(5));
+        jet_refiner(&mut partition, &weights, graph.clone(), 2, 12, 0.1, 0.75, 0.99, Some(5));
         assert_eq!(graph.edge_cut(&partition), 334753684);
     }
 }

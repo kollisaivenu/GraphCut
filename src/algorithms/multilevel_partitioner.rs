@@ -67,7 +67,9 @@ fn multilevel_partitioner(
     while index >= 0 {
 
         // Run Jet Refiner to improve the partition.
-        JetRefiner { iterations: jet_iterations,
+        JetRefiner {
+            num_of_partitions,
+            iterations: jet_iterations,
             tolerance_factor: jet_tolerance_factor,
             balance_factor,
             filter_ratio: jet_filter_ratio}.partition(&mut coarse_graph_partition,
