@@ -60,7 +60,7 @@ fn jet_refiner(
     let mut dest_partititon = vec![-2; partition.len()];
     let mut gain = vec![None; partition.len()];
     let mut moves = Vec::new();
-
+    let mut weak_rebalance_counter = 1;
     match seed {
         Some(s) => {
             random_num_gen = SmallRng::seed_from_u64(s)
@@ -87,18 +87,41 @@ fn jet_refiner(
             // to ensure that they don't become eligible to move in the next iteration.
             // This prevents oscillation of vertices
             lock_vertices(&moves, &mut locked_vertices);
+            weak_rebalance_counter = 1;
         } else {
             // the jetrw subroutine is run to balance the weights of the partition
             // (should the partitions weights become highly imbalanced)
-            moves = jetrw(&adjacency,
-                          &partition_iter,
-                          weights,
-                          total_weight,
-                          &vertex_connectivity_data_structure,
-                          num_of_partitions,
-                          balance_factor,
-                          &mut random_num_gen,
-                          &partition_weights);
+            // moves = jetrw(&adjacency,
+            //               &partition_iter,
+            //               weights,
+            //               total_weight,
+            //               &vertex_connectivity_data_structure,
+            //               num_of_partitions,
+            //               balance_factor,
+            //               &mut random_num_gen,
+            //               &partition_weights);
+
+            if weak_rebalance_counter <= 2 {
+                moves = jetrw(&adjacency,
+                              &partition_iter,
+                              weights,
+                              total_weight,
+                              &vertex_connectivity_data_structure,
+                              num_of_partitions,
+                              balance_factor,
+                              &mut random_num_gen,
+                              &partition_weights);
+                weak_rebalance_counter += 1;
+            } else {
+                moves = jetrs(&adjacency,
+                              &partition_iter,
+                              weights,
+                              total_weight,
+                              &vertex_connectivity_data_structure,
+                              num_of_partitions,
+                              balance_factor,
+                              &partition_weights);
+            }
         }
 
         // The moves from either jetlp or jetrw are applied on the current partition state.
@@ -221,6 +244,7 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
 }
 
 fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<i64>, num_of_partitions: usize, balance_factor: f64, random_num_gen: &mut SmallRng, partition_weights: &[i64]) -> Vec<Move> {
+    // Weaker but better rebalancer in terms of the change in edgecut
     let max_slots: usize = 25;
     let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_of_partitions as f64);
     let num_of_vertices = graph.len();
@@ -266,7 +290,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
                 &partitions,
                 &light_partitions);
 
-            if adjacent_partitions.len() == 0{
+            if adjacent_partitions.len() == 0 {
                 dest_partition = light_partitions[random_num_gen.gen_range(0..light_partitions.len())];
             } else {
                 dest_partition = get_most_connected_partition(vertex,
@@ -326,8 +350,123 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
     }
 
     moves
-
 }
+
+fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<i64>, num_of_partitions: usize, balance_factor: f64, partition_weights: &[i64]) -> Vec<Move> {
+    // Stronger but  worse rebalancer in terms of the change in edgecut
+    let max_slots: usize = 25;
+    let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_of_partitions as f64);
+    let num_of_vertices = graph.len();
+    let mut heavy_partitions: Vec<usize> = Vec::new();
+    let mut light_partitions: Vec<usize> = Vec::new();
+    let mut moves = Vec::new();
+
+    // Set what the max weight of the destination partition can be.
+    // This is to prevent oscillations when the jetrw algorithm is rerun
+    let mut max_weight_dest = max_weight_per_partitions*0.99;
+
+    if max_weight_dest < max_weight_per_partitions - 100f64 {
+        max_weight_dest = max_weight_per_partitions - 100f64;
+    }
+
+    for partition_id in 0..num_of_partitions{
+        let weight_of_partition = partition_weights[partition_id] as f64;
+
+        if max_weight_per_partitions < weight_of_partition {
+            heavy_partitions.push(partition_id);
+        }
+
+        if max_weight_dest >= weight_of_partition {
+            light_partitions.push(partition_id);
+        }
+    }
+
+    // Find out the avg loss for each eligible vertex move (from an overweight partition to an underweight partition).
+    // A positive loss indicates an increase in edge cut.
+    let (loss): (Vec<i64>) = (0..num_of_vertices).map(|vertex| {
+        let weight_of_partition = partition_weights[partitions[vertex]];
+        let limit = 1.5*(weight_of_partition as f64 - ((total_weight as f64)/(num_of_partitions as f64)));
+        let mut calculated_loss = 0;
+
+        if heavy_partitions.contains(&partitions[vertex]) && ((vertex_weights[vertex] as f64) < limit) {
+
+            let adjacent_partitions = get_adjacent_eligible_destination_partitions(
+                graph,
+                vertex,
+                &partitions,
+                &light_partitions);
+
+            let unique_adjacent_partitions: FxHashSet<usize> = adjacent_partitions.into_iter().collect();
+
+            let mut conn_strength = 0;
+
+            for adjacent_partition in &unique_adjacent_partitions {
+                conn_strength += conn(vertex, *adjacent_partition, vertex_connectivity_data_structure, num_of_partitions);
+            }
+            calculated_loss = conn(vertex,
+                                   partitions[vertex],
+                                   vertex_connectivity_data_structure,
+                                   num_of_partitions) - ((conn_strength as f64)/(unique_adjacent_partitions.len() as f64)).floor() as i64
+        }
+        calculated_loss
+    }).collect();
+
+    // Slot the loss values into different buckets. This is to prevent sorting the loss values
+    // which can be expensive.
+    let mut bucket = init_bucket(heavy_partitions.len(), max_slots);
+
+    for vertex in 0..num_of_vertices{
+
+        if heavy_partitions.contains(&partitions[vertex]) {
+            let index = heavy_partitions.iter().position(|&x| x == partitions[vertex]).unwrap();
+            let slot = calculate_slot(loss[vertex], max_slots);
+            bucket[get_index_for_bucket(index, slot, max_slots)].push(vertex);
+        }
+    }
+
+    let mut weight_to_add_to_light_partition = vec![0f64; light_partitions.len()];
+
+    for (index, &light_partition) in light_partitions.iter().enumerate() {
+        weight_to_add_to_light_partition[index] = max_weight_per_partitions - partition_weights[light_partition] as f64;
+    }
+
+    let mut light_partition_index_to_fill = 0usize;
+
+    for (index, &heavy_partition) in heavy_partitions.iter().enumerate() {
+        let mut is_still_heavy = true;
+        let weight_to_remove = partition_weights[heavy_partition] as f64 - max_weight_per_partitions;
+        let mut weight_currently_removed = 0f64;
+        for slot in 0..max_slots {
+            for &vertex in &bucket[get_index_for_bucket(index, slot, max_slots)] {
+
+                if weight_currently_removed < weight_to_remove {
+                    weight_currently_removed = weight_currently_removed + (vertex_weights[vertex] as f64);
+                    moves.push(Move{vertex, partition_id: light_partitions[light_partition_index_to_fill]});
+                    weight_to_add_to_light_partition[light_partition_index_to_fill] = weight_to_add_to_light_partition[light_partition_index_to_fill] - vertex_weights[vertex] as f64;
+
+                    if weight_to_add_to_light_partition[light_partition_index_to_fill] <= 0f64 {
+                        light_partition_index_to_fill += 1;
+
+                        if light_partition_index_to_fill == light_partitions.len() {
+                            return moves;
+                        }
+                    }
+                } else {
+                    is_still_heavy = false;
+                    break;
+                }
+            }
+
+            if !is_still_heavy {
+                break
+            }
+        }
+    }
+
+    moves
+}
+
+
 
 fn lock_vertices(moves: &Vec<Move>, locked_vertices: &mut [bool]) {
     // This function gets the list of locked vertices that shouldn't be moved in the subsequent iterations.
