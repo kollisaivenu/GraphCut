@@ -86,18 +86,6 @@ fn jet_refiner(
             lock_vertices(&moves, &mut locked_vertices);
             weak_rebalance_counter = 1;
         } else {
-            // the jetrw subroutine is run to balance the weights of the partition
-            // (should the partitions weights become highly imbalanced)
-            // moves = jetrw(&adjacency,
-            //               &partition_iter,
-            //               weights,
-            //               total_weight,
-            //               &vertex_connectivity_data_structure,
-            //               num_of_partitions,
-            //               balance_factor,
-            //               &mut random_num_gen,
-            //               &partition_weights);
-
             if weak_rebalance_counter <= 2 {
                 moves = jetrw(&adjacency,
                               &partition_iter,

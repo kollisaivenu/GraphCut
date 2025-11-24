@@ -1,8 +1,5 @@
-use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
-use rustc_hash::FxHashMap;
-use sprs::TriMat;
 use crate::algorithms::{Error, JetRefiner, Greedy};
 use crate::algorithms::heavy_edge_matching::heavy_edge_matching_coarse;
 use crate::Partition;
