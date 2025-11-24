@@ -4,6 +4,7 @@ use std::fmt;
 mod jet_refiner;
 mod multilevel_partitioner;
 mod greedy;
+mod heavy_edge_matching;
 
 use jet_refiner::JetRefiner;
 use greedy::Greedy;
