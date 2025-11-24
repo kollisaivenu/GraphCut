@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 // This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
 pub mod graph;
 pub mod gen_weights;

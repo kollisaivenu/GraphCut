@@ -1,8 +1,4 @@
 // This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
-
-use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator};
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::ParallelIterator as _;
 use std::iter::{Cloned, Zip};
 use std::slice::Iter;
 use ::sprs::CsMat;

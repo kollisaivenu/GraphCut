@@ -5,12 +5,10 @@
 // SIAM Journal on Scientific Computing 46.5 (2024): B700-B724.
 
 use crate::algorithms::Error;
-use crate::imbalance::{compute_imbalance_from_part_loads, compute_parts_load, imbalance};
-use std::ops::{AddAssign, Neg, Sub, SubAssign};
-use num_traits::{Bounded, ToPrimitive, Zero};
+use crate::imbalance::{compute_imbalance_from_part_loads, compute_parts_load};
+use num_traits::{ToPrimitive};
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
-use rayon::prelude::*;
 use rustc_hash::FxHashSet;
 use crate::graph::Graph;
 
@@ -59,7 +57,6 @@ fn jet_refiner(
     let mut random_num_gen;
     let mut dest_partititon = vec![-2; partition.len()];
     let mut gain = vec![None; partition.len()];
-    let mut moves = Vec::new();
     let mut weak_rebalance_counter = 1;
     match seed {
         Some(s) => {
@@ -71,7 +68,7 @@ fn jet_refiner(
     }
 
     while current_iteration < iterations {
-
+        let mut moves = Vec::new();
         if imbalance_of_current_iter_partition < balance_factor {
             // the jetlp subroutine is used to generate a better partition
             moves = jetlp(&adjacency,
@@ -215,7 +212,7 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
 
     let mut moves = Vec::with_capacity(first_filter_eligible_moves.len());
 
-    for vertex_index in (0..first_filter_eligible_moves.len()) {
+    for vertex_index in 0..first_filter_eligible_moves.len() {
         let vertex = first_filter_eligible_moves[vertex_index];
         let mut gain_for_vertex = 0;
 
@@ -278,7 +275,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
         let limit = 1.5*(weight_of_partition as f64 - ((total_weight as f64)/(num_of_partitions as f64)));
 
         let mut calculated_loss = 0;
-        let mut dest_partition: usize = 0;
+        let mut dest_partition = 0;
 
         if heavy_partitions.contains(&partitions[vertex]) && ((vertex_weights[vertex] as f64) < limit) {
             let mut best_light_dest_partition = None;
@@ -297,13 +294,13 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
             if best_light_dest_partition.is_none() {
                 best_light_dest_partition = Some(light_partitions[random_num_gen.gen_range(0..light_partitions.len())]);
             }
-
+            dest_partition = best_light_dest_partition.unwrap();
             calculated_loss = conn(vertex,
                                    partitions[vertex],
                                    vertex_connectivity_data_structure,
                                    num_of_partitions) -
                               conn(vertex,
-                                   best_light_dest_partition.unwrap(),
+                                   dest_partition,
                                    vertex_connectivity_data_structure,
                                    num_of_partitions);
         }
@@ -383,7 +380,7 @@ fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
 
     // Find out the avg loss for each eligible vertex move (from an overweight partition to an underweight partition).
     // A positive loss indicates an increase in edge cut.
-    let (loss): (Vec<i64>) = (0..num_of_vertices).map(|vertex| {
+    let loss: Vec<i64> = (0..num_of_vertices).map(|vertex| {
         let weight_of_partition = partition_weights[partitions[vertex]];
         let limit = 1.5*(weight_of_partition as f64 - ((total_weight as f64)/(num_of_partitions as f64)));
         let mut calculated_avg_loss = 0;
@@ -395,7 +392,7 @@ fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
             for (neighbor, _) in graph.neighbors(vertex) {
                 let neighbor_partition = partitions[neighbor];
                 if light_partitions.contains(&neighbor_partition) && !unique_adjacent_partitions.contains(&neighbor_partition) {
-                    conn_strength += conn(vertex, neighbor_partition, vertex_connectivity_data_structure, num_of_partitions);;
+                    conn_strength += conn(vertex, neighbor_partition, vertex_connectivity_data_structure, num_of_partitions);
                     unique_adjacent_partitions.insert(neighbor_partition);
                 }
             }
@@ -490,23 +487,6 @@ fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: 
     }
 
     list_of_moveable_vertices
-}
-
-fn non_negative_gain_filter(first_filter_eligible_moves: &[usize],
-                            partition_dest: &[i64],
-                            gain: &Vec<i64>) -> Vec<Move> {
-    // Gets the list of moves that have positive gain after the first filter is applied.
-    let mut list_of_moves: Vec<Move> = Vec::new();
-
-    for vertex_index in (0..first_filter_eligible_moves.len()) {
-
-        if gain[vertex_index] > 0 {
-            let vertex = first_filter_eligible_moves[vertex_index];
-            list_of_moves.push(Move{vertex: vertex, partition_id: partition_dest[vertex] as usize});
-        }
-    }
-
-    list_of_moves
 }
 
 fn conn(vertex_id: usize,
@@ -608,21 +588,6 @@ fn calculate_slot(loss: i64, max_slot_size: usize) -> usize {
     } else {
         ((2 + loss.to_i64().unwrap().ilog2()) as usize).min(max_slot_size-1)
     }
-}
-
-fn get_weight_of_partition(partition_id: usize, partitions: &[usize], vertex_weights: &[i64]) -> f64 {
-    // Gets the weight of a particular partition.
-
-    let mut weight = 0f64;
-
-    for (index, partition) in partitions.iter().enumerate() {
-
-        if *partition == partition_id {
-            weight += vertex_weights[index] as f64;
-        }
-    }
-
-    weight
 }
 
 fn get_index_for_bucket(partition_index: usize, slot: usize, max_slots: usize) -> usize {
@@ -792,27 +757,6 @@ mod tests {
     }
 
     #[test]
-    fn test_non_negative_gain_filter() {
-        // Arrange
-        let gain = vec![3, 2, -1];
-        let eligible_vertices_to_move = [0, 1, 2];
-        let partition_dest  = [1, 0, 1];
-
-        // Act
-        let moves = non_negative_gain_filter(
-            &eligible_vertices_to_move,
-            &partition_dest,
-            &gain);
-
-        // Assert
-        assert_eq!(moves.len(), 2);
-        assert_eq!(moves[0].vertex, 0);
-        assert_eq!(moves[0].partition_id, 1);
-        assert_eq!(moves[1].vertex, 1);
-        assert_eq!(moves[1].partition_id, 0);
-    }
-
-    #[test]
     fn test_gain_conn_ratio_filter() {
         // Arrange
         let mut adjacency = Graph::new();
@@ -946,19 +890,6 @@ mod tests {
     }
 
     #[test]
-    fn test_get_weight_of_partition(){
-        // Arrange
-        let partitions = [1, 0, 0];
-        let vertex_weights = [1, 2, 3];
-
-        // Act
-        let weight = get_weight_of_partition(0, &partitions, &vertex_weights);
-
-        // Assert
-        assert_eq!(weight, 5.0);
-    }
-
-    #[test]
     fn test_calculate_slot() {
         // Arrange and Act
         let slot1 = calculate_slot(-4, 3);
@@ -990,7 +921,7 @@ mod tests {
         let partitions = [0, 0, 0, 1];
         let total_weight = 10;
         let mut random_num_gen = SmallRng::from_entropy();
-        let mut partition_weights = compute_parts_load(&partitions, 2, &vtx_weights);
+        let partition_weights = compute_parts_load(&partitions, 2, &vtx_weights);
 
         // Act
         let vtx_conn_data_struct =
@@ -1070,6 +1001,6 @@ mod tests {
             .collect();
 
         jet_refiner(&mut partition, &weights, graph.clone(), 32, 12, 0.1, 0.75, 0.99, Some(5));
-        assert_eq!(graph.edge_cut(&partition), 1067987671);
+        assert_eq!(graph.edge_cut(&partition), 1042556657);
     }
 }

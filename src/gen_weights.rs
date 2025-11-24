@@ -7,11 +7,11 @@ pub fn gen_uniform_weights(no_of_vertices: usize) -> Vec<i64> {
 
 /// Generate the weight vector where each vertice has a random weight
 pub fn gen_random_weights(no_of_vertices: usize, min_weight: i64, max_weight: i64) -> Vec<i64> {
-    if(max_weight < min_weight) {
+    if max_weight < min_weight {
         panic!("Max weight must be greater than min weight.");
     }
 
-    if(max_weight < 0 || min_weight <= 0) {
+    if max_weight < 0 || min_weight <= 0 {
         panic!("Max/min weight must be non-negative.");
     }
     let mut rng = rand::thread_rng();

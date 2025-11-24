@@ -1,17 +1,5 @@
 // This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
-use itertools::Itertools;
-use num_traits::FromPrimitive;
 use num_traits::ToPrimitive;
-use num_traits::Zero;
-use rayon::iter::IndexedParallelIterator;
-use rayon::iter::ParallelIterator;
-use rayon::iter::IntoParallelIterator;
-use rayon::iter::IntoParallelRefIterator as _;
-use rayon::iter::ParallelIterator as _;
-use std::iter::Sum;
-use std::ops::AddAssign;
-use std::ops::Div;
-use std::ops::Sub;
 
 /// Calculates the total weight for each part of a given partition.
 pub fn compute_parts_load(partition: &[usize], num_parts: usize, weights: &[i64]) -> Vec<i64>

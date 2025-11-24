@@ -24,7 +24,7 @@ pub fn read_matrix_market_as_graph(file_path: &Path) -> Graph{
                 graph_csr: csr_matrix,
             }
         },
-        Err(E) => {
+        Err(_) => {
             panic!("Error reading the matrix market file.");
         }
     }

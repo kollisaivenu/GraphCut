@@ -1,15 +1,11 @@
-use std::io::{Write};
 use rand::seq::SliceRandom;
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use rustc_hash::FxHashMap;
-use sprs::{CsMat, CsMatBase, TriMat};
-use sprs::errors::StructureError;
-use sprs::visu::print_nnz_pattern;
+use sprs::TriMat;
 use crate::algorithms::{Error, JetRefiner, Greedy};
-use crate::{Partition};
+use crate::Partition;
 use crate::graph::Graph;
-use crate::imbalance::imbalance;
 
 fn multilevel_partitioner(
     partition: &mut [usize],
@@ -186,7 +182,7 @@ fn partition_uncoarse(partition: &[usize], fine_vertex_to_coarse_vertex_mapping:
     // and it belonged to partition 0, then vertex 1 and 2 would belong to partition 0 in the uncoarsed graph.
     let mut new_partition: Vec<usize> = vec![0; fine_vertex_to_coarse_vertex_mapping.len()];
 
-    for vertex in (0..fine_vertex_to_coarse_vertex_mapping.len()){
+    for vertex in 0..fine_vertex_to_coarse_vertex_mapping.len(){
         new_partition[vertex] = partition[fine_vertex_to_coarse_vertex_mapping[vertex]];
     }
 
@@ -303,7 +299,8 @@ impl<'a> Partition<(Graph, &'a [i64])> for MultiLevelPartitioner {
 #[cfg(test)]
 mod tests {
     use std::path::Path;
-    use crate::gen_weights::{gen_uniform_weights};
+    use crate::gen_weights::gen_uniform_weights;
+    use crate::imbalance::imbalance;
     use crate::io::read_matrix_market_as_graph;
     use super::*;
 
