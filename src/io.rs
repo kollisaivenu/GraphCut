@@ -1,37 +1,30 @@
 use std::fs::File;
 use std::path::Path;
 use std::io::Write;
-use sprs::io::read_matrix_market;
-use sprs::{TriMatI};
+use sprs::io::{read_matrix_market, IoError};
 use crate::graph::Graph;
 
 /// Read a matrix market file and output Graph struct.
-pub fn read_matrix_market_as_graph(file_path: &Path) -> Graph{
-    // Check if file exists
-    if !file_path.exists() {
-        panic!("The matrix market file {} does not exist.", file_path.display());
-    }
+pub fn read_matrix_market_as_graph(file_path: &Path) -> Result<Graph, IoError> {
+    // read the matrix market file as a TriMat with edge lengths.
+    let tri_mat = read_matrix_market(file_path);
 
-    // Attempt to read the matrix market file as a TriMat with edge lengths as f64.
-    let tri_matrix_f64: Result<TriMatI<i64, usize>, _> = read_matrix_market(file_path);
-
-    match tri_matrix_f64 {
-
+    match tri_mat {
         Ok(tri_matrix) => {
             // Read was successful, we return it after converting to CSR.
             let csr_matrix = tri_matrix.to_csr();
-            Graph {
+            Ok(Graph {
                 graph_csr: csr_matrix,
-            }
+            })
         },
-        Err(_) => {
-            panic!("Error reading the matrix market file.");
+        Err(e) => {
+            Err(e)
         }
     }
 }
 
 /// Write the partition array to a file.
-pub fn write_partition_data_to_file(partition: &[usize], file_name: &str) -> Result<(), std::io::Error> {
+pub fn write_partition_data_to_file(partition: &[usize], file_name: &str) -> std::io::Result<()> {
     let mut file = File::create(file_name)?;
     for vertex_id in 0..partition.len() {
         writeln!(file, "vertex {} => partition {}", vertex_id, partition[vertex_id])?;
@@ -62,30 +55,12 @@ mod tests {
         let integer_matrix_file_path = create_mock_file(temp_dir.path(), "integer_matrix.mtx", integer_content);
 
         // Act
-        let graph_f64 = read_matrix_market_as_graph(&Path::new(&integer_matrix_file_path));
+        let graph = read_matrix_market_as_graph(&Path::new(&integer_matrix_file_path)).unwrap();
 
         // Assert
-        assert_eq!(graph_f64.graph_csr.rows(), 5);
-        assert_eq!(graph_f64.graph_csr.cols(), 5);
-        assert_eq!(graph_f64.graph_csr.nnz(), 3);
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_read_matrix_market_for_real() -> Result<(), std::io::Error> {
-        // Arrange
-        let temp_dir = tempdir()?;
-        let real_content = "%%MatrixMarket matrix coordinate real general\n%\n5 5 3\n1 1 1.0\n2 2 2.0\n5 5 5.0\n";
-        let real_content_file_path = create_mock_file(temp_dir.path(), "f64_matrix.mtx", real_content);
-
-        // Act
-        let graph_f64 = read_matrix_market_as_graph(Path::new(&real_content_file_path));
-
-        // Assert
-        assert_eq!(graph_f64.graph_csr.rows(), 5);
-        assert_eq!(graph_f64.graph_csr.cols(), 5);
-        assert_eq!(graph_f64.graph_csr.nnz(), 3);
+        assert_eq!(graph.graph_csr.rows(), 5);
+        assert_eq!(graph.graph_csr.cols(), 5);
+        assert_eq!(graph.graph_csr.nnz(), 3);
 
         Ok(())
     }

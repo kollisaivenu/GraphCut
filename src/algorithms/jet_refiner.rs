@@ -968,7 +968,7 @@ mod tests {
 
     #[test]
     fn test_vt2010_2_partition() {
-        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
+        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx")).unwrap();
         let weights = gen_uniform_weights(graph.len());
         let mut rng = SmallRng::seed_from_u64(5);
         let mut partition: Vec<usize> = (0..graph.len())
@@ -981,7 +981,7 @@ mod tests {
 
     #[test]
     fn test_vt2010_32_partition() {
-        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
+        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx")).unwrap();
         let weights = gen_uniform_weights(graph.len());
         let mut rng = SmallRng::seed_from_u64(5);
         let mut partition: Vec<usize> = (0..graph.len())

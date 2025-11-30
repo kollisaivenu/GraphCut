@@ -117,7 +117,7 @@ fn partition_uncoarse(partition: &[usize], fine_vertex_to_coarse_vertex_mapping:
 /// use GraphCut::Partition;
 /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
 ///
-///     let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
+///     let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"))?;
 ///     let weights = gen_random_weights(graph.len(), 1, 3);
 ///     let mut partition = vec![0; graph.len()];
 ///
@@ -237,7 +237,7 @@ mod tests {
 
     #[test]
     fn test_multilevel_partitioner_on_vt2010() {
-        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
+        let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx")).unwrap();
         let weights = gen_uniform_weights(graph.len());
         let seed = Some(5);
         let mut partition = vec![0; graph.len()];

@@ -1,13 +1,16 @@
 use std::path::Path;
 use std::time::Instant;
+use rustc_hash::FxHashSet;
+use sprs::TriMat;
 use GraphCut::algorithms::{MultiLevelPartitioner};
 use GraphCut::gen_weights::gen_uniform_weights;
+use GraphCut::graph::Graph;
 use GraphCut::imbalance::imbalance;
 use GraphCut::io::read_matrix_market_as_graph;
 use GraphCut::Partition;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"));
+    let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"))?;
     let weights = gen_uniform_weights(graph.len());
     let mut partition = vec![0; graph.len()];
     let start = Instant::now();
