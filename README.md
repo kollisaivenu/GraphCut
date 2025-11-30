@@ -1,6 +1,6 @@
 # GraphCut Graph Partitioner
 
- GraphCut is a multilevel-multithreaded 2-way graph partitioner built in Rust. It takes in as input a graph (denoted by a sparse matrix) in matrix market format and partitions it into 2 partitions with the goal of minimizing edge cut is and balancing the weights of the vertices across the two partitions.
+ GraphCut is a multilevel k-way graph partitioner built in Rust. It takes in as input a graph (denoted by a sparse matrix) in matrix market format and partitions it into 2 partitions with the goal of minimizing edge cut is and balancing the weights of the vertices across the two partitions.
  It uses the following 3 algorithms for generating the partitions.
 
 - **Heavy Edge Matching** algorithm for graph coarsening.
