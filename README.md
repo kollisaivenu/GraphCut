@@ -1,10 +1,10 @@
 # GraphCut Graph Partitioner
 
- GraphCut is a multilevel-multithreaded 2-way graph partitioner built in Rust. It takes in as input a graph (denoted by a sparse matrix) in matrix market format and partitions it into 2 partitions with the goal of minimizing edge cut is and balancing the weights of the vertices across the two partitions.
+ GraphCut is a multilevel k-way graph partitioner built in Rust. It takes in as input a graph (denoted by a sparse matrix) in matrix market format and partitions it into 2 partitions with the goal of minimizing edge cut is and balancing the weights of the vertices across the two partitions.
  It uses the following 3 algorithms for generating the partitions.
 
 - **Heavy Edge Matching** algorithm for graph coarsening.
-- **Recursive Co-ordinate Bisection** for initial partition.
+- **Simple Greedy Bucketing Algorithm** for initial partition.
 - **Jet Partition Refiner** for refining the partition during the uncoarsening phase.
 
 ## Usage
@@ -16,27 +16,22 @@ use GraphCut::algorithms::MultiLevelPartitioner;
 use GraphCut::imbalance::imbalance;
 use GraphCut::Partition;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let graph = read_matrix_market_as_graph(Path::new("vt2010.mtx"));
-    let weights = gen_random_weights(graph.len(), 1.0, 3.0);
+fn main() -> Result<(), Box<dyn std::error::Error>> { 
+    let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx"))?;
+    let weights = gen_random_weights(graph.len(), 1, 3);
     let mut partition = vec![0; graph.len()];
-    
-    MultiLevelPartitioner {..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
-
+    let num_of_partitions = 2;
+    MultiLevelPartitioner {num_of_partitions, ..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
     let edge_cut = graph.edge_cut(&partition);
-
     println!("Edge cut = {:?}", edge_cut);
-    println!("Weights = {:?}", imbalance(2, &partition, weights.clone()));
+    println!("Weights = {:?}", imbalance(num_of_partitions, &partition, &weights));
     write_partition_data_to_file(&partition, "vt2010_partition")?;
-    
+
     Ok(())
 }
 ```
-## Note
-The Recursive Co-ordinate Bisection algorithm uses ForceAtlas2 library that currently runs only on rust nightly channel. Hence, to run the graph partitioner, set the channel to rust nightly, using the command ```rustup override set nightly```
 ## References
-- Berger, and Bokhari. "A partitioning strategy for nonuniform problems on multiprocessors." IEEE Transactions on Computers 100, no. 5 (1987): 570-580.
-- Bramas, Berenger. "A novel hybrid quicksort algorithm vectorized using AVX-512 on Intel Skylake." arXiv preprint arXiv:1704.08579 (2017).
+- Horowitz, Ellis and Sahni, Sartaj, 1974. Computing partitions with applications to the knapsack problem. *J. ACM*, 21(2):277–292.
 - Gilbert, Michael S., Kamesh Madduri, Erik G. Boman, and Siva Rajamanickam. "Jet: Multilevel graph partitioning on graphics processing units." SIAM Journal on Scientific Computing 46, no. 5 (2024): B700-B724.
 
 ## Credits
