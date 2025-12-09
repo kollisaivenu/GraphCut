@@ -1,10 +1,7 @@
 use std::path::Path;
 use std::time::Instant;
-use rustc_hash::FxHashSet;
-use sprs::TriMat;
 use GraphCut::algorithms::{MultiLevelPartitioner};
 use GraphCut::gen_weights::gen_uniform_weights;
-use GraphCut::graph::Graph;
 use GraphCut::imbalance::imbalance;
 use GraphCut::io::read_matrix_market_as_graph;
 use GraphCut::Partition;
