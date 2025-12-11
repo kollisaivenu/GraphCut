@@ -8,6 +8,8 @@
 - **Jet Partition Refiner** for refining the partition during the uncoarsening phase.
 
 ## Usage
+
+### Use Programmatically
 ```rust
 use std::path::Path;
 use GraphCut::io::{read_matrix_market_as_graph, write_partition_data_to_file};
@@ -24,12 +26,34 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     MultiLevelPartitioner {num_of_partitions, ..Default::default()}.partition(&mut partition, (graph.clone(), &weights))?;
     let edge_cut = graph.edge_cut(&partition);
     println!("Edge cut = {:?}", edge_cut);
-    println!("Weights = {:?}", imbalance(num_of_partitions, &partition, &weights));
+    println!("Imbalance ratio = {:?}", imbalance(num_of_partitions, &partition, &weights));
     write_partition_data_to_file(&partition, "vt2010_partition")?;
 
     Ok(())
 }
 ```
+### Use as CLI Tool
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/kollisaivenu/GraphCut.git
+   ```
+2. Navigate the directory:
+   ```bash
+   cd GraphCut
+   ```
+3. Install the tool
+   ```bash
+   cargo install --path .
+   ```
+4. Syntax is as follows:
+   ```bash
+   GraphCut <MTX_FILEPATH> <NUM_OF_PARTITIONS> <BALANCE_FACTOR> <PARTITION_FILE>[OPTIONS]
+   ```
+5. Example Usage
+   ```bash
+   GraphCut "./testdata/vt2010.mtx" 2 0.1 "vt2010_partition"
+   ```
+
 ## References
 - Horowitz, Ellis and Sahni, Sartaj, 1974. Computing partitions with applications to the knapsack problem. *J. ACM*, 21(2):277–292.
 - Gilbert, Michael S., Kamesh Madduri, Erik G. Boman, and Siva Rajamanickam. "Jet: Multilevel graph partitioning on graphics processing units." SIAM Journal on Scientific Computing 46, no. 5 (2024): B700-B724.
