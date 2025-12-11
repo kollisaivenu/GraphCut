@@ -1,4 +1,4 @@
-// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
+// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe (See NOTICE.md)
 use std::iter::{Cloned, Zip};
 use std::slice::Iter;
 use ::sprs::CsMat;

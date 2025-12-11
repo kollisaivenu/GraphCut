@@ -1,4 +1,4 @@
-// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
+// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe (See NOTICE.md)
 use std::cmp::Ordering;
 use super::Error;
 use num_traits::Zero;

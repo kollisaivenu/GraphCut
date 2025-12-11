@@ -1,4 +1,4 @@
-// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe
+// This file has code from https://github.com/LIHPC-Computational-Geometry/coupe (See NOTICE.md)
 use num_traits::ToPrimitive;
 
 /// Calculates the total weight for each part of a given partition.
