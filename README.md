@@ -60,6 +60,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Credits
 
+This project was the outcome of an Independent Study done under the supervision of **Professor Jed Brown at University of Colorado, Boulder**.
+
 This project includes code from another graph partitioning project called Coupe.
 
 * **Original Project:** https://github.com/LIHPC-Computational-Geometry/coupe
