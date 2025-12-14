@@ -2,9 +2,7 @@
 use num_traits::ToPrimitive;
 
 /// Calculates the total weight for each part of a given partition.
-pub fn compute_parts_load(partition: &[usize], num_parts: usize, weights: &[i64]) -> Vec<i64>
-where
-{
+pub fn compute_parts_load(partition: &[usize], num_parts: usize, weights: &[i64]) -> Vec<i64> {
     let mut loads = vec![0; num_parts];
 
     for (&part, w) in partition.iter().zip(weights.into_iter()) {
