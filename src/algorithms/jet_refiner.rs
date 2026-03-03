@@ -5,14 +5,13 @@
 // SIAM Journal on Scientific Computing 46.5 (2024): B700-B724.
 
 use crate::algorithms::Error;
-use crate::imbalance::{compute_imbalance_from_part_loads, compute_parts_load, imbalance};
+use crate::imbalance::{compute_imbalance_from_part_loads, compute_parts_load};
 use std::ops::{AddAssign, Neg, Sub, SubAssign};
-use std::time::Instant;
 use num_traits::{Bounded, ToPrimitive, Zero};
 use rand::{Rng, SeedableRng};
 use rand::rngs::SmallRng;
 use rayon::prelude::*;
-use rustc_hash::{FxBuildHasher, FxHashMap, FxHashSet};
+use rustc_hash::{FxHashMap, FxHashSet};
 use crate::graph::Graph;
 
 #[derive(Debug)]
@@ -169,7 +168,7 @@ fn jet_refiner(
     }
 }
 
-fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_connectivity_data_structure: &Vec<FxHashMap<usize, i64>>, locked_vertices: &[bool], filter_ratio: f64, dest_partition: &mut [i64], gain: &mut [Option<i64>], moves: &mut Vec<Move>) {
+fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], locked_vertices: &[bool], filter_ratio: f64, dest_partition: &mut [i64], gain: &mut [Option<i64>], moves: &mut Vec<Move>) {
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
     for vertex in 0..graph.len() {
         // These are values if all the vertex belongs to the same partition as its neighbours.
@@ -241,7 +240,7 @@ fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_co
     };
 }
 
-fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<FxHashMap<usize, i64>>, num_of_partitions: usize, balance_factor: f64, random_num_gen: &mut SmallRng, partition_weights: &[i64], moves: &mut Vec<Move>) {
+fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], num_of_partitions: usize, balance_factor: f64, random_num_gen: &mut SmallRng, partition_weights: &[i64], moves: &mut Vec<Move>) {
     // Weaker but better rebalancer in terms of the change in edgecut
     let max_slots: usize = 25;
     let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_of_partitions as f64);
@@ -349,7 +348,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
     }
 }
 
-fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &Vec<FxHashMap<usize, i64>>, num_of_partitions: usize, balance_factor: f64, partition_weights: &[i64], moves: &mut Vec<Move>) {
+fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], num_of_partitions: usize, balance_factor: f64, partition_weights: &[i64], moves: &mut Vec<Move>) {
     // Stronger but  worse rebalancer in terms of the change in edgecut
     let max_slots: usize = 25;
     let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_of_partitions as f64);
@@ -455,7 +454,7 @@ fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
     }
 }
 
-fn calculate_connection_strength_with_light_partitions(vertex: usize, eligible_partitions: &FxHashSet<usize>, vertex_connectivity_data_structure: &Vec<FxHashMap<usize, i64>>) -> (i64, usize) {
+fn calculate_connection_strength_with_light_partitions(vertex: usize, eligible_partitions: &FxHashSet<usize>, vertex_connectivity_data_structure: &[FxHashMap<usize, i64>]) -> (i64, usize) {
     // Gets the connection strength of the vertex with all the light partitions and the number of light partitions.
 
     let mut no_of_light_partitions = 0usize;
@@ -471,7 +470,7 @@ fn calculate_connection_strength_with_light_partitions(vertex: usize, eligible_p
     (conn_strength, no_of_light_partitions)
 }
 
-fn lock_vertices(moves: &Vec<Move>, locked_vertices: &mut [bool]) {
+fn lock_vertices(moves: &[Move], locked_vertices: &mut [bool]) {
     // This function gets the list of locked vertices that shouldn't be moved in the subsequent iterations.
     locked_vertices.fill(false);
 
@@ -481,7 +480,7 @@ fn lock_vertices(moves: &Vec<Move>, locked_vertices: &mut [bool]) {
 
 }
 
-fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &Vec<FxHashMap<usize, i64>>, filter_ratio: f64, num_of_partitions: usize) -> Vec<usize> {
+fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], filter_ratio: f64, num_of_partitions: usize) -> Vec<usize> {
     // Get a list of vertices that have a positive gain or slightly negative gain value (based on the filter ratio).
 
     let num_vertices = partitions.len();
@@ -502,7 +501,7 @@ fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: 
 
 fn conn(vertex_id: usize,
         partition_id: usize,
-        vertex_connectivity_data_structure: &Vec<FxHashMap<usize, i64>>,
+        vertex_connectivity_data_structure: &[FxHashMap<usize, i64>],
         num_of_partitions: usize) ->i64 {
     // Gets how well a vertex is connected to a partition (adds all the edge weights connected to the partition).
 
@@ -531,8 +530,8 @@ fn init_vertex_connectivity_data_structure(graph: &Graph,
 fn update_parts_and_vertex_connectivity(
     graph: &Graph,
     partition: &mut [usize],
-    vertex_connectivity_data_structure: &mut Vec<FxHashMap<usize, i64>>,
-    moves: &Vec<Move>,
+    vertex_connectivity_data_structure: &mut [FxHashMap<usize, i64>],
+    moves: &[Move],
     curr_iter_partition_edge_cut: &mut i64,
     partition_weights: &mut [i64],
     weights: &[i64],
@@ -602,7 +601,7 @@ fn calculate_slot(loss: i64, max_slot_size: usize) -> usize {
     }
 }
 
-fn get_most_connected_light_partition(vertex: usize, eligible_partitions: &FxHashSet<usize>, vertex_connectivity_data_structure: &Vec<FxHashMap<usize, i64>>) -> Option<usize> {
+fn get_most_connected_light_partition(vertex: usize, eligible_partitions: &FxHashSet<usize>, vertex_connectivity_data_structure: &[FxHashMap<usize, i64>]) -> Option<usize> {
     // Gets the most connection light partitions for a particular vertex.
     let mut most_strength = 0;
     let mut most_connected_partition= None;
