@@ -166,7 +166,7 @@ impl Default for MultiLevelPartitioner {
             jet_iterations: 12,
             balance_factor: 0.1,
             jet_filter_ratio: 0.75,
-            jet_tolerance_factor: 0.99,
+            jet_tolerance_factor: 0.999,
         }
     }
 }
