@@ -59,6 +59,7 @@ fn jet_refiner(
     let mut gain = vec![None; partition.len()];
     let mut moves = Vec::with_capacity(partition.len());
     let mut weak_rebalance_counter = 1;
+
     match seed {
         Some(s) => {
             random_num_gen = SmallRng::seed_from_u64(s)
@@ -81,7 +82,6 @@ fn jet_refiner(
                   &mut dest_partititon,
                   &mut gain,
                   &mut moves);
-
             // Based on the suggested moves of the jetlp subroutine, the vertices to be moved are locked
             // to ensure that they don't become eligible to move in the next iteration.
             // This prevents oscillation of vertices
@@ -136,10 +136,10 @@ fn jet_refiner(
                                              &mut dest_partititon,
                                              &mut gain);
 
-        moves.clear();
+
 
         imbalance_of_current_iter_partition = compute_imbalance_from_part_loads(num_of_partitions, &partition_weights);
-
+        moves.clear();
         // Check if the current iteration partition is balance
         if  imbalance_of_current_iter_partition < balance_factor {
             // Check if the current iteration partition is better than the current best partition
@@ -350,7 +350,7 @@ fn jetrw(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
 
 fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], num_of_partitions: usize, balance_factor: f64, partition_weights: &[i64], moves: &mut Vec<Move>) {
     // Stronger but  worse rebalancer in terms of the change in edgecut
-    let max_slots: usize = 25;
+    let max_slots: usize = 50;
     let max_weight_per_partitions = (1f64 + balance_factor)*(total_weight as f64)/(num_of_partitions as f64);
     let num_of_vertices = graph.len();
     let mut heavy_partitions = FxHashSet::default();
@@ -358,12 +358,10 @@ fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
 
     // Set what the max weight of the destination partition can be.
     // This is to prevent oscillations when the jetrw algorithm is rerun
-    let mut max_weight_dest = max_weight_per_partitions*0.99;
-
-    if max_weight_dest < max_weight_per_partitions - 100f64 {
-        max_weight_dest = max_weight_per_partitions - 100f64;
-    }
-
+    // let mut max_weight_dest = max_weight_per_partitions*0.99;
+    let opt_size = (total_weight as f64 / num_of_partitions as f64).ceil();
+    let max_weight_dest = f64::max(opt_size + 1.0, max_weight_per_partitions * 0.99);
+    let mut weight_to_add_to_partition = FxHashMap::default();
     for partition_id in 0..num_of_partitions{
         let weight_of_partition = partition_weights[partition_id] as f64;
 
@@ -373,8 +371,11 @@ fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
 
         if max_weight_dest >= weight_of_partition {
             light_partitions.insert(partition_id);
+            weight_to_add_to_partition.insert(partition_id, max_weight_per_partitions - partition_weights[partition_id] as f64);
         }
     }
+
+
     let mut heavy_partition_to_index = FxHashMap::default();
     for (index, &heavy_partition) in heavy_partitions.iter().enumerate() {
         heavy_partition_to_index.insert(heavy_partition, index);
@@ -390,15 +391,18 @@ fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
         if heavy_partitions.contains(&partitions[vertex]) && ((vertex_weights[vertex] as f64) < limit) {
 
             let (conn_strength, no_of_light_partitions) = calculate_connection_strength_with_light_partitions(vertex,
-                                                                                                                          &light_partitions,
-                                                                                                                          vertex_connectivity_data_structure);
+                                                                                                              &light_partitions,
+                                                                                                              vertex_connectivity_data_structure);
+
             calculated_loss = conn(vertex,
                                    partitions[vertex],
                                    vertex_connectivity_data_structure,
-                                   num_of_partitions) - ((conn_strength as f64)/(no_of_light_partitions as f64)).floor() as i64
+                                   num_of_partitions) - ((conn_strength as f64)/(no_of_light_partitions as f64)).floor() as i64;
+
         }
         calculated_loss
     }).collect();
+
 
     // Slot the loss values into different buckets. This is to prevent sorting the loss values
     // which can be expensive.
@@ -407,38 +411,46 @@ fn jetrs(graph: &Graph, partitions: &[usize], vertex_weights: &[i64], total_weig
     for vertex in 0..num_of_vertices{
 
         if heavy_partitions.contains(&partitions[vertex]) {
-            //let index = heavy_partitions.iter().position(|&x| x == partitions[vertex]).unwrap();
             let index = heavy_partition_to_index[&partitions[vertex]];
             let slot = calculate_slot(loss[vertex], max_slots);
             bucket[get_index_for_bucket(index, slot, max_slots)].push(vertex);
         }
     }
 
-    let mut weight_to_add_to_light_partition = vec![0f64; light_partitions.len()];
-
-    for (index, &light_partition) in light_partitions.iter().enumerate() {
-        weight_to_add_to_light_partition[index] = max_weight_per_partitions - partition_weights[light_partition] as f64;
-    }
-
-    let mut light_partition_index_to_fill = 0usize;
-    let mut light_partitions = light_partitions.iter().cloned().collect::<Vec<usize>>();
     for (index, &heavy_partition) in heavy_partitions.iter().enumerate() {
         let mut is_still_heavy = true;
         let weight_to_remove = partition_weights[heavy_partition] as f64 - max_weight_per_partitions;
+
         let mut weight_currently_removed = 0f64;
         for slot in 0..max_slots {
             for &vertex in &bucket[get_index_for_bucket(index, slot, max_slots)] {
+                if weight_currently_removed <= weight_to_remove {
+                    let mut found_light_partition = false;
+                    // Move a vertex in a heavy partition to a light partition that it is connected to.
+                    for (&neighboring_partition, _) in vertex_connectivity_data_structure[vertex].iter() {
 
-                if weight_currently_removed < weight_to_remove {
-                    weight_currently_removed = weight_currently_removed + (vertex_weights[vertex] as f64);
-                    moves.push(Move{vertex, partition_id: light_partitions[light_partition_index_to_fill]});
-                    weight_to_add_to_light_partition[light_partition_index_to_fill] = weight_to_add_to_light_partition[light_partition_index_to_fill] - vertex_weights[vertex] as f64;
-
-                    if weight_to_add_to_light_partition[light_partition_index_to_fill] <= 0f64 {
-                        light_partition_index_to_fill += 1;
-
-                        if light_partition_index_to_fill == light_partitions.len() {
-                            return;
+                        if light_partitions.contains(&neighboring_partition) && weight_to_add_to_partition[&neighboring_partition] >= vertex_weights[vertex] as f64 {
+                            weight_currently_removed = weight_currently_removed + (vertex_weights[vertex] as f64);
+                            moves.push(Move{vertex, partition_id: neighboring_partition});
+                            *weight_to_add_to_partition
+                                .entry(neighboring_partition)
+                                .or_insert(0f64) -= vertex_weights[vertex] as f64;
+                            found_light_partition = true;
+                            break;
+                        }
+                    }
+                    // If we don't find a connected light partition for a vertex to move to,
+                    // then we choose a random light partition to move it to
+                    if !found_light_partition {
+                        for &light_partition in light_partitions.iter() {
+                            if weight_to_add_to_partition[&light_partition] >= vertex_weights[vertex] as f64 {
+                                moves.push(Move{vertex, partition_id: light_partition});
+                                *weight_to_add_to_partition
+                                    .entry(light_partition)
+                                    .or_insert(0f64) -= vertex_weights[vertex] as f64;
+                                weight_currently_removed = weight_currently_removed + (vertex_weights[vertex] as f64);
+                                break;
+                            }
                         }
                     }
                 } else {
@@ -459,15 +471,15 @@ fn calculate_connection_strength_with_light_partitions(vertex: usize, eligible_p
 
     let mut no_of_light_partitions = 0usize;
     let mut conn_strength = 0i64;
-
+    let mut unique_light_partitions = FxHashSet::default();
     for (&partition_id, &strength) in &vertex_connectivity_data_structure[vertex] {
         if eligible_partitions.contains(&partition_id) {
-            no_of_light_partitions += 1;
+            unique_light_partitions.insert(partition_id);
             conn_strength += strength;
         }
     }
 
-    (conn_strength, no_of_light_partitions)
+    (conn_strength, unique_light_partitions.len())
 }
 
 fn lock_vertices(moves: &[Move], locked_vertices: &mut [bool]) {
