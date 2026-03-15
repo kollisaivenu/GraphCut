@@ -72,7 +72,6 @@ fn jet_refiner(
         if imbalance_of_current_iter_partition < balance_factor {
             // the jetlp subroutine is used to generate a better partition
             jetlp(&adjacency,
-                  num_of_partitions,
                   &partition_iter,
                   &vertex_connectivity_data_structure,
                   &locked_vertices,
@@ -166,7 +165,7 @@ fn jet_refiner(
     }
 }
 
-fn jetlp(graph: &Graph, num_of_partitions: usize, partition: &[usize], vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], locked_vertices: &[bool], filter_ratio: f64, dest_partition: &mut [i64], gain: &mut [Option<i64>], moves: &mut Vec<Move>) {
+fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], locked_vertices: &[bool], filter_ratio: f64, dest_partition: &mut [i64], gain: &mut [Option<i64>], moves: &mut Vec<Move>) {
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
     for vertex in 0..graph.len() {
         // These are values if all the vertex belongs to the same partition as its neighbours.
@@ -982,7 +981,6 @@ mod tests {
             &partitions);
         let mut moves = Vec::with_capacity(partitions.len());
         jetlp(&adjacency,
-              2,
               &partitions,
               &vtx_conn_data_struct,
               &locked_vertices,
