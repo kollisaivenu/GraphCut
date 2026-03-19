@@ -202,7 +202,7 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
     // First filter is applied to check which of the vertices are eligible for moving from one partition
     // to another. Either the gain should be positive or can be slightly negative (based on the filter ratio).
     // Slightly negative gain vertices are also considered in the hope that they could provide better global solutions
-    let first_filter_eligible_moves = gain_conn_ratio_filter(locked_vertices,
+    let (first_filter_eligible_moves, is_vertex_moveable) = gain_conn_ratio_filter(locked_vertices,
                                                                          partition,
                                                                          &gain,
                                                                          vertex_connectivity_data_structure,
@@ -210,8 +210,6 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
 
     // A heuristic attempt is made to approximate the true gain that would occur since
     // two positive moves when applied simultaneously can be detrimental.
-    let first_filter_eligible_vertices = first_filter_eligible_moves.clone().into_iter().collect::<FxHashSet<_>>();
-
     for vertex_index in 0..first_filter_eligible_moves.len() {
         let vertex = first_filter_eligible_moves[vertex_index];
         let mut gain_for_vertex = 0;
@@ -219,7 +217,7 @@ fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure:
         for (neighbor_vertex, edge_weight) in graph.neighbors(vertex){
             let mut partition_source = partition[neighbor_vertex];
 
-            if is_higher_placed(neighbor_vertex, vertex, &gain, &first_filter_eligible_vertices) {
+            if is_higher_placed(neighbor_vertex, vertex, &gain, &is_vertex_moveable) {
                 partition_source = dest_partition[neighbor_vertex] as usize;
             }
 
@@ -291,6 +289,7 @@ fn jetrw(
             light_partitions.push(partition_id);
         }
     }
+
     // Create a hashmap that can be used to precompute the index for every heavy partition.
     let mut heavy_partition_to_index = vec![0; num_of_partitions];
 
@@ -310,7 +309,7 @@ fn jetrw(
             * (weight_of_partition as f64 - ((total_weight as f64) / (num_of_partitions as f64)));
 
         let mut calculated_loss = 0;
-        let dest_partition: usize = 0;
+        let mut dest_partition: usize = 0;
 
         if is_heavy_partition(weight_of_partition as f64, max_possible_weight_of_part)
             && ((vertex_weights[vertex] as f64) < limit)
@@ -322,11 +321,11 @@ fn jetrw(
                 vertex_connectivity_data_structure,
             );
 
-            let dest_partition;
+
             if cfg!(test){
                 let mut random_num_gen = StdRng::from_seed([42u8; 32]);
-                let idx = random_num_gen.gen_range(0..light_partitions.len());
-                dest_partition = light_partitions[idx]
+                let index = random_num_gen.gen_range(0..light_partitions.len());
+                dest_partition = light_partitions[index];
             } else {
                 dest_partition = most_connected_light_partition.unwrap_or(light_partitions[random_num_gen.gen_range(0..light_partitions.len())]);
             }
@@ -552,11 +551,12 @@ fn lock_vertices(moves: &[Move], locked_vertices: &mut [bool]) {
 
 }
 
-fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], filter_ratio: f64) -> Vec<usize> {
+fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &[FxHashMap<usize, i64>], filter_ratio: f64) -> (Vec<usize>, Vec<bool>) {
     // Get a list of vertices that have a positive gain or slightly negative gain value (based on the filter ratio).
 
     let num_vertices = partitions.len();
     let mut list_of_moveable_vertices  = Vec::new();
+    let mut is_vertex_moveable = vec![false; num_vertices];
 
     for vertex in 0..num_vertices {
         if (!locked_vertices[vertex])
@@ -565,10 +565,11 @@ fn gain_conn_ratio_filter(locked_vertices: &[bool], partitions: &[usize], gain: 
             &&
             (gain[vertex].unwrap() > 0 || -gain[vertex].unwrap() < (filter_ratio * (conn(vertex, partitions[vertex], vertex_connectivity_data_structure) as f64)).floor() as i64){
             list_of_moveable_vertices.push(vertex);
+            is_vertex_moveable[vertex] = true;
         }
     }
 
-    list_of_moveable_vertices
+    (list_of_moveable_vertices, is_vertex_moveable)
 }
 
 fn conn(vertex_id: usize,
@@ -645,10 +646,10 @@ fn update_parts_and_vertex_connectivity(
     }
 }
 
-fn is_higher_placed(vertex1: usize, vertex2: usize, gain: &[Option<i64>], list_of_vertices: &FxHashSet<usize>) -> bool {
+fn is_higher_placed(vertex1: usize, vertex2: usize, gain: &[Option<i64>], list_of_vertices: &[bool]) -> bool {
     // Checks if vertex1 is better ranked than vertex2 (used in the vertex afterburner).
 
-    if list_of_vertices.contains(&vertex1) && !gain[vertex1].is_none()
+    if list_of_vertices[vertex1] && !gain[vertex1].is_none()
         &&
         !gain[vertex2].is_none()
         && ((gain[vertex1].unwrap() > gain[vertex2].unwrap())
@@ -815,7 +816,6 @@ mod tests {
         adjacency.insert(1, 0, 2);
         adjacency.insert(2, 0, 1);
         adjacency.insert(3, 0, 4);
-        let num_of_partitions = 2;
 
         let partition = [0, 0, 0, 1];
         let vtx_conn_data_struct = init_vertex_connectivity_data_structure(
@@ -844,7 +844,6 @@ mod tests {
         adjacency.insert(3, 0, 4);
 
         let partitions = [0, 0, 0, 1];
-        let num_of_partitions = 2;
         let vtx_conn_data_struct = init_vertex_connectivity_data_structure(
             &adjacency,
             &partitions);
@@ -855,7 +854,7 @@ mod tests {
         locked_vertices[3] = true;
 
         // Act
-        let eligible_vertices_to_move = gain_conn_ratio_filter(
+        let (eligible_vertices_to_move, is_vertex_moveable) = gain_conn_ratio_filter(
             &locked_vertices,
             &partitions,
             &gain,
@@ -866,6 +865,11 @@ mod tests {
         assert_eq!(eligible_vertices_to_move.len(), 2);
         assert_eq!(eligible_vertices_to_move[0], 0);
         assert_eq!(eligible_vertices_to_move[1], 1);
+        assert_eq!(is_vertex_moveable.len(), 4);
+        assert_eq!(is_vertex_moveable[0], true);
+        assert_eq!(is_vertex_moveable[1], true);
+        assert_eq!(is_vertex_moveable[2], false);
+        assert_eq!(is_vertex_moveable[3], false);
     }
 
     #[test]
@@ -885,7 +889,6 @@ mod tests {
         adjacency.insert(3, 5, 3);
         adjacency.insert(1, 3, 2);
 
-        let num_of_partitions = 2;
         let mut partitions = [0, 0, 0, 0, 1, 1];
         let vtx_weights = [1, 1, 1, 1, 1, 1];
         let mut edge_cut = adjacency.edge_cut(&partitions);
@@ -939,7 +942,7 @@ mod tests {
     fn test_is_higher_placed(){
         // Arrange
         let gain = [Some(4), Some(2), Some(2), Some(1)];
-        let list_of_vertices = [0, 1, 2].into_iter().collect();
+        let list_of_vertices = [true, true, true, false];
 
         // Act
         let result1 = is_higher_placed(0, 2, &gain, &list_of_vertices);
@@ -991,7 +994,7 @@ mod tests {
         let partitions = [0, 0, 0, 1];
         let total_weight = 10;
         let mut random_num_gen = SmallRng::from_entropy();
-        let mut partition_weights = compute_parts_load(&partitions, 2, &vtx_weights);
+        let partition_weights = compute_parts_load(&partitions, 2, &vtx_weights);
 
         // Act
         let vtx_conn_data_struct =
@@ -1048,7 +1051,7 @@ mod tests {
     }
 
     #[test]
-    fn test_vt2010_2part() {
+    fn test_vt2010_2parts() {
         let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx")).unwrap();
         let weights = gen_uniform_weights(graph.len());
         let mut rng = SmallRng::seed_from_u64(5);
@@ -1062,30 +1065,30 @@ mod tests {
     }
 
     #[test]
-    fn test_vt2010_32part() {
+    fn test_vt2010_32parts() {
         let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx")).unwrap();
         let weights = gen_uniform_weights(graph.len());
         let mut rng = SmallRng::seed_from_u64(5);
-        let mut parts = 32;
+        let parts = 32;
         let mut partition: Vec<usize> = (0..graph.len())
             .map(|_| rng.gen_range(0..parts))
             .collect();
 
         jet_refiner(&mut partition, &weights, graph.clone(), parts, 12, 0.1, 0.75, 0.99, Some(5));
-        assert_eq!(graph.edge_cut(&partition), 1060984841);
+        assert_eq!(graph.edge_cut(&partition), 1043930868);
     }
 
     #[test]
-    fn test_vt2010_64part() {
+    fn test_vt2010_64parts() {
         let graph = read_matrix_market_as_graph(Path::new("./testdata/vt2010.mtx")).unwrap();
         let weights = gen_uniform_weights(graph.len());
         let mut rng = SmallRng::seed_from_u64(5);
-        let mut parts = 64;
+        let parts = 64;
         let mut partition: Vec<usize> = (0..graph.len())
             .map(|_| rng.gen_range(0..parts))
             .collect();
 
         jet_refiner(&mut partition, &weights, graph.clone(), parts, 12, 0.1, 0.75, 0.99, Some(5));
-        assert_eq!(graph.edge_cut(&partition), 1115050119);
+        assert_eq!(graph.edge_cut(&partition), 1099279270);
     }
 }
