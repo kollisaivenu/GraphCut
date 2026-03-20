@@ -9,7 +9,7 @@ fn multilevel_partitioner(
     partition: &mut [usize],
     weights: &[i64],
     graph: Graph,
-    num_of_partitions: usize,
+    num_of_parts: usize,
     seed: Option<u64>,
     jet_iterations: u32,
     balance_factor: f64,
@@ -30,7 +30,7 @@ fn multilevel_partitioner(
     };
 
     // Keep coarsening the graph until the graph has less than 100 nodes
-    while coarse_graphs.last().unwrap().len() > num_of_partitions.max(100)  {
+    while coarse_graphs.last().unwrap().len() > num_of_parts.max(100)  {
 
         let (coarse_graph, fine_vertex_to_coarse_vertex_mapping, weights_of_coarse_graph) = heavy_edge_matching_coarse(coarse_graphs.last().unwrap(), &mut rng, weights_coarse_graphs.last().unwrap());
         // Store the coarse graphs at every level
@@ -53,7 +53,7 @@ fn multilevel_partitioner(
             *vtx_partition = rng.gen_range(0..2) as usize
         });
     } else {
-        Greedy { part_count: num_of_partitions }.partition(&mut coarse_graph_partition, weights_coarse_graphs.last().unwrap().clone()).unwrap();
+        Greedy { part_count: num_of_parts }.partition(&mut coarse_graph_partition, weights_coarse_graphs.last().unwrap().clone()).unwrap();
     }
 
     let mut index = coarse_graphs.len() - 1;
@@ -62,7 +62,7 @@ fn multilevel_partitioner(
 
         // Run Jet Refiner to improve the partition.
         JetRefiner {
-            num_of_partitions,
+            num_of_parts,
             iterations: jet_iterations,
             tolerance_factor: jet_tolerance_factor,
             balance_factor,
@@ -130,8 +130,8 @@ fn partition_uncoarse(partition: &[usize], fine_vertex_to_coarse_vertex_mapping:
 
 #[derive(Debug, Clone, Copy)]
 pub struct MultiLevelPartitioner {
-    /// Number of partitions
-    pub num_of_partitions: usize,
+    /// Number of parts
+    pub num_of_parts: usize,
 
     /// Seed for MultiLevel Graph Partitioner
     pub seed: Option<u64>,
@@ -141,13 +141,13 @@ pub struct MultiLevelPartitioner {
     pub jet_iterations: u32,
 
     /// A numerical factor ranging between 0.0 and 1.0 that determines the maximum allowable
-    /// deviation for a partition. The maximum weight of a partition with a balance factor of lambda
-    /// can be (1+lambda)*((totol weight of graph)/(number of partitions)).
+    /// deviation for a part. The maximum weight of a part with a balance factor of lambda
+    /// can be (1+lambda)*((totol weight of graph)/(number of parts)).
     pub balance_factor: f64,
 
     /// A numerical ratio ranging from 0.0 to 1.0 that determines which vertices are eligible for consideration based on
     /// their gain value in the first filter. A vertice would be considered
-    /// if -gain(vertice) > (filter ratio)*(maximum connectivity of the vertice to any destination partition)
+    /// if -gain(vertice) > (filter ratio)*(maximum connectivity of the vertice to any destination part)
     pub jet_filter_ratio: f64,
 
     /// A nymerical factor ranging from 0.0 to 1.0 that is used to determine when to reset the iteration counter.
@@ -161,7 +161,7 @@ pub struct MultiLevelPartitioner {
 impl Default for MultiLevelPartitioner {
     fn default() -> Self {
         MultiLevelPartitioner {
-            num_of_partitions: 2,
+            num_of_parts: 2,
             seed: None,
             jet_iterations: 12,
             balance_factor: 0.1,
@@ -197,7 +197,7 @@ impl<'a> Partition<(Graph, &'a [i64])> for MultiLevelPartitioner {
             part_ids,
             weights,
             adjacency,
-            self.num_of_partitions,
+            self.num_of_parts,
             self.seed,
             self.jet_iterations,
             self.balance_factor,
