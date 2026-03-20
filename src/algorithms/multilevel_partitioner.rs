@@ -171,14 +171,14 @@ impl Default for MultiLevelPartitioner {
     }
 }
 
-impl<'a> Partition<(Graph, &'a [i64])> for MultiLevelPartitioner {
+impl Partition<(Graph, &[i64])> for MultiLevelPartitioner {
     type Metadata = ();
     type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (Graph, &'a [i64]),
+        (adjacency, weights): (Graph, &[i64]),
     ) -> Result<Self::Metadata, Self::Error> {
 
         if part_ids.len() != weights.len() {

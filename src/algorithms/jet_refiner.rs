@@ -720,14 +720,14 @@ pub(crate) struct JetRefiner {
     pub tolerance_factor: f64,
 }
 
-impl<'a> crate::Partition<(Graph, &'a [i64])> for JetRefiner {
+impl crate::Partition<(Graph, &[i64])> for JetRefiner {
     type Metadata = ();
     type Error = Error;
 
     fn partition(
         &mut self,
         part_ids: &mut [usize],
-        (adjacency, weights): (Graph, &'a [i64]),
+        (adjacency, weights): (Graph, &[i64]),
     ) -> Result<Self::Metadata, Self::Error> {
 
         if part_ids.len() != weights.len() {
