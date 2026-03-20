@@ -419,7 +419,7 @@ fn jetrs(graph: &Graph, partition: &[usize], vertex_weights: &[i64], total_weigh
 
     // Set what the max weight of the destination part can be.
     // This is to prevent oscillations when the jetrw algorithm is rerun
-    let mut max_weight_of_dest_part = max_possible_weight_of_part*0.99;
+    let max_weight_of_dest_part = max_possible_weight_of_part*0.99;
     let mut weight_to_add_to_part = vec![0f64; num_of_parts];
 
     for part_id in 0..num_of_parts{
@@ -431,7 +431,7 @@ fn jetrs(graph: &Graph, partition: &[usize], vertex_weights: &[i64], total_weigh
 
         if max_weight_of_dest_part >= weight_of_part {
             light_parts.push(part_id);
-            weight_to_add_to_part[part_id] = (max_possible_weight_of_part - part_weights[part_id] as f64);
+            weight_to_add_to_part[part_id] = max_possible_weight_of_part - part_weights[part_id] as f64;
         }
     }
 
