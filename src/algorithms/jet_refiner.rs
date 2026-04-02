@@ -451,7 +451,7 @@ fn jetrs(graph: &Graph, partition: &[usize], vertex_weights: &[i64], total_weigh
         if is_heavy_part(weight_of_partition as f64, max_possible_weight_of_part) && ((vertex_weights[vertex] as f64) < limit) {
 
             let (conn_strength, no_of_light_parts) = calculate_connection_strength_with_light_parts(vertex,
-                                                                                                              weight_of_partition as f64,
+                                                                                                              part_weights,
                                                                                                               max_weight_of_dest_part,
                                                                                                               num_of_parts,
                                                                                                               vertex_connectivity_data_structure);
@@ -523,20 +523,15 @@ fn jetrs(graph: &Graph, partition: &[usize], vertex_weights: &[i64], total_weigh
     }
 }
 
-fn calculate_connection_strength_with_light_parts(vertex: usize, part_weight: f64, max_weight_of_dest_part: f64, num_of_parts: usize, vertex_connectivity_data_structure: &[FxHashMap<usize, i64>]) -> (i64, usize) {
+fn calculate_connection_strength_with_light_parts(vertex: usize, part_weights: &[i64], max_weight_of_dest_part: f64, num_of_parts: usize, vertex_connectivity_data_structure: &[FxHashMap<usize, i64>]) -> (i64, usize) {
     // Gets the connection strength of the vertex with all the light parts and the number of light parts.
 
     let mut conn_strength = 0i64;
-    let mut is_part_counted = vec![false; num_of_parts];
     let mut unique_parts_count = 0;
     for (&part_id, &strength) in &vertex_connectivity_data_structure[vertex] {
-        if is_light_part(part_weight, max_weight_of_dest_part) {
+        if is_light_part(part_weights[part_id] as f64, max_weight_of_dest_part) {
             conn_strength += strength;
-
-            if !is_part_counted[part_id] {
-                unique_parts_count += 1;
-                is_part_counted[part_id] = true;
-            }
+            unique_parts_count += 1;
         }
     }
 
@@ -1077,7 +1072,7 @@ mod tests {
             .collect();
 
         jet_refiner(&mut partition, &weights, graph.clone(), parts, 12, 0.1, 0.75, 0.99, Some(5));
-        assert_eq!(graph.edge_cut(&partition), 1039612501);
+        assert_eq!(graph.edge_cut(&partition), 1043930868);
     }
 
     #[test]
@@ -1091,6 +1086,6 @@ mod tests {
             .collect();
 
         jet_refiner(&mut partition, &weights, graph.clone(), parts, 12, 0.1, 0.75, 0.99, Some(5));
-        assert_eq!(graph.edge_cut(&partition), 1095690413);
+        assert_eq!(graph.edge_cut(&partition), 1099369279);
     }
 }
