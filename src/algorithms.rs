@@ -5,11 +5,14 @@ mod jet_refiner;
 mod multilevel_partitioner;
 mod greedy;
 mod heavy_edge_matching;
+mod vertex_connectivity_data_structure1;
+mod vertex_connectivity_data_structure2;
 
 use jet_refiner::JetRefiner;
 use greedy::Greedy;
 pub use multilevel_partitioner::MultiLevelPartitioner;
-
+pub use vertex_connectivity_data_structure1::VertexConnectivityDataStructure1;
+pub use vertex_connectivity_data_structure2::VertexConnectivityDataStructure2;
 
 /// Common errors thrown by algorithms.
 #[derive(Clone, Copy, Debug)]
