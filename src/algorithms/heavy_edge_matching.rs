@@ -12,7 +12,7 @@ pub(crate) fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut SmallRng, weig
     let mut vertices: Vec<usize> = (0..graph.len()).collect();
     vertices.shuffle(rng);
     let mut super_vertex = 0usize;
-    let mut num_of_edges = graph.graph_csr.nnz();
+    let mut num_of_edges = graph.get_num_of_edges();
 
     // Iterate over the vertices of the graph.
     for vertex in vertices{
@@ -67,16 +67,14 @@ pub(crate) fn heavy_edge_matching_coarse(graph: &Graph, rng: &mut SmallRng, weig
         }
     }
 
-    // Construction of the coarse graph. First contruct a TriMat and then convert it to CSR format.
+    // Construction of the coarse graph. First construct a TriMat and then convert it to CSR format.
     // This is more efficient.
-    let mut new_coarse_graph  = Graph::new();
     let mut triplet_matrix = TriMat::with_capacity((super_vertex, super_vertex), num_of_edges);
 
     for (&(vertex1, vertex2), &weight) in edge_to_weight_mapping.iter(){
         triplet_matrix.add_triplet(vertex1, vertex2, weight);
     }
-
-    new_coarse_graph.graph_csr = triplet_matrix.to_csr();
+    let mut new_coarse_graph  = Graph::create_graph(triplet_matrix.to_csr());
 
     // Construction of the weights array for the coarse graph.
     let mut weights_coarse_graph = vec![0; new_coarse_graph.len()];

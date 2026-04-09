@@ -13,9 +13,7 @@ pub fn read_matrix_market_as_graph(file_path: &Path) -> Result<Graph, IoError> {
         Ok(tri_matrix) => {
             // Read was successful, we return it after converting to CSR.
             let csr_matrix = tri_matrix.to_csr();
-            Ok(Graph {
-                graph_csr: csr_matrix,
-            })
+            Ok(Graph::create_graph(csr_matrix))
         },
         Err(e) => {
             Err(e)
@@ -58,9 +56,9 @@ mod tests {
         let graph = read_matrix_market_as_graph(&Path::new(&integer_matrix_file_path)).unwrap();
 
         // Assert
-        assert_eq!(graph.graph_csr.rows(), 5);
-        assert_eq!(graph.graph_csr.cols(), 5);
-        assert_eq!(graph.graph_csr.nnz(), 3);
+        assert_eq!(graph.get_edge_weight(0, 0), Some(1i64));
+        assert_eq!(graph.get_edge_weight(1, 1), Some(1i64));
+        assert_eq!(graph.get_edge_weight(2, 2), Some(1i64));
 
         Ok(())
     }

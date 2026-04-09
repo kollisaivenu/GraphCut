@@ -6,15 +6,22 @@ use ::sprs::CsMat;
 /// Struct that represents a graph
 pub struct Graph{
     /// The CsMat (from sprs) is used to store the graph as a sparse matrix in CSR format
-    pub graph_csr: CsMat<i64>
+    graph_csr: CsMat<i64>
 }
 
 impl Graph {
 
-    /// Create a new graph
+    /// Create a new empty graph
     pub fn new() -> Self {
         Self {
             graph_csr: CsMat::empty(sprs::CSR, 0)
+        }
+    }
+
+    /// Create a new graph from existing CsMat
+    pub fn create_graph(graph_csr: CsMat<i64>) -> Self{
+        Self {
+            graph_csr
         }
     }
 
@@ -104,6 +111,10 @@ impl Graph {
         }
     }
 
+    /// Get number of edges
+    pub fn get_num_of_edges(&self) -> usize {
+        self.graph_csr.nnz()
+    }
 }
 
 
