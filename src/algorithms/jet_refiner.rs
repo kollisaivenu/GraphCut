@@ -45,7 +45,7 @@ fn jet_refiner(
     let mut partition_iter = partition.to_vec();
     let mut current_iteration = 0;
     // let mut vertex_connectivity_data_structure = init_vertex_connectivity_data_structure(&adjacency, partition);
-    let mut vertex_connectivity_data_structure = VertexConnectivityDataStructure1::init_vertex_connectivity_structure(&adjacency, num_of_parts, partition);
+    let mut vertex_connectivity_data_structure = VertexConnectivityDataStructure2::init_vertex_connectivity_structure(&adjacency, num_of_parts, partition);
     let mut locked_vertices = vec![false; adjacency.len()];
 
     let mut part_weights = compute_parts_load(&partition, num_of_parts, &weights);
@@ -168,7 +168,7 @@ fn jet_refiner(
     }
 }
 
-fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &VertexConnectivityDataStructure1, locked_vertices: &[bool], filter_ratio: f64, dest_part: &mut [i64], gain: &mut [Option<i64>], moves: &mut Vec<Move>) {
+fn jetlp(graph: &Graph, partition: &[usize], vertex_connectivity_data_structure: &VertexConnectivityDataStructure2, locked_vertices: &[bool], filter_ratio: f64, dest_part: &mut [i64], gain: &mut [Option<i64>], moves: &mut Vec<Move>) {
     // iterate over all the vertices to find out which vertices provides the best gain (decrease in edge cut)
     for vertex in 0..graph.len() {
         // These are values if all the vertex belongs to the same part as its neighbours.
@@ -261,7 +261,7 @@ fn jetrw(
     partition: &[usize],
     vertex_weights: &[i64],
     total_weight: i64,
-    vertex_connectivity_data_structure: &VertexConnectivityDataStructure1,
+    vertex_connectivity_data_structure: &VertexConnectivityDataStructure2,
     num_of_parts: usize,
     balance_factor: f64,
     random_num_gen: &mut SmallRng,
@@ -397,7 +397,7 @@ fn get_most_connected_light_part(
     vertex: usize,
     part_weights: &[i64],
     max_dest_part_weight: f64,
-    vertex_connectivity_data_structure: &VertexConnectivityDataStructure1,
+    vertex_connectivity_data_structure: &VertexConnectivityDataStructure2,
     graph: &Graph,
     partition: &[usize],
 ) -> Option<usize> {
@@ -422,7 +422,7 @@ fn get_most_connected_light_part(
     most_connected_part
 }
 
-fn jetrs(graph: &Graph, partition: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &VertexConnectivityDataStructure1, num_of_parts: usize, balance_factor: f64, part_weights: &[i64], moves: &mut Vec<Move>) {
+fn jetrs(graph: &Graph, partition: &[usize], vertex_weights: &[i64], total_weight: i64, vertex_connectivity_data_structure: &VertexConnectivityDataStructure2, num_of_parts: usize, balance_factor: f64, part_weights: &[i64], moves: &mut Vec<Move>) {
     // Stronger but  worse rebalancer in terms of the change in edgecut
     let max_slots: usize = 50;
     let max_possible_weight_of_part = (1f64 + balance_factor)*(total_weight as f64)/(num_of_parts as f64);
@@ -539,7 +539,7 @@ fn jetrs(graph: &Graph, partition: &[usize], vertex_weights: &[i64], total_weigh
     }
 }
 
-fn calculate_connection_strength_with_light_parts(vertex: usize, part_weights: &[i64], max_weight_of_dest_part: f64, num_of_parts: usize, vertex_connectivity_data_structure: &VertexConnectivityDataStructure1, graph: &Graph, partition: &[usize]) -> (i64, usize) {
+fn calculate_connection_strength_with_light_parts(vertex: usize, part_weights: &[i64], max_weight_of_dest_part: f64, num_of_parts: usize, vertex_connectivity_data_structure: &VertexConnectivityDataStructure2, graph: &Graph, partition: &[usize]) -> (i64, usize) {
     // Gets the connection strength of the vertex with all the light parts and the number of light parts.
     let mut already_seen = vec![false; num_of_parts];
     let mut conn_strength = 0i64;
@@ -571,7 +571,7 @@ fn lock_vertices(moves: &[Move], locked_vertices: &mut [bool]) {
 
 }
 
-fn gain_conn_ratio_filter(locked_vertices: &[bool], partition: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &VertexConnectivityDataStructure1, filter_ratio: f64) -> (Vec<usize>, Vec<bool>) {
+fn gain_conn_ratio_filter(locked_vertices: &[bool], partition: &[usize], gain: &[Option<i64>], vertex_connectivity_data_structure: &VertexConnectivityDataStructure2, filter_ratio: f64) -> (Vec<usize>, Vec<bool>) {
     // Get a list of vertices that have a positive gain or slightly negative gain value (based on the filter ratio).
 
     let num_vertices = partition.len();
@@ -594,7 +594,7 @@ fn gain_conn_ratio_filter(locked_vertices: &[bool], partition: &[usize], gain: &
 
 fn conn(vertex_id: usize,
         part_id: usize,
-        vertex_connectivity_data_structure: &VertexConnectivityDataStructure1) ->i64 {
+        vertex_connectivity_data_structure: &VertexConnectivityDataStructure2) ->i64 {
     // Gets how well a vertex is connected to a part (adds all the edge weights connected to the partition).
 
     //*vertex_connectivity_data_structure[vertex_id].get(&part_id).unwrap_or(&0i64)
@@ -623,7 +623,7 @@ fn init_vertex_connectivity_data_structure(graph: &Graph,
 fn update_parts_and_vertex_connectivity(
     graph: &Graph,
     partition: &mut [usize],
-    vertex_connectivity_data_structure: &mut VertexConnectivityDataStructure1,
+    vertex_connectivity_data_structure: &mut VertexConnectivityDataStructure2,
     moves: &[Move],
     curr_iter_partition_edge_cut: &mut i64,
     part_weights: &mut [i64],
