@@ -59,7 +59,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 |:---------|:---------:|----------:|--------------:|--------------:|
 | METIS    | 191385828 |  279067533 | 403162547| 574990573|
 | Scotch   | 232806148 | 340131433 | 496502690 | 714742403|
-| GraphCut |     186624039      |  272899924   |39701522 |560601151|
+| GraphCut |     186624039      |  272899924   |394046967 |560601151|
 
 #### Edgecut for ky2010.mtx (found in testdata folder) with METIS, Scotch and GraphCut (lower is better)
 | Tool     |     32 parts      |   64 parts |  128 parts | 256 parts |
