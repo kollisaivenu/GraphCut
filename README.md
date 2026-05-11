@@ -61,12 +61,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 | Scotch   | 232806148 | 340131433 | 496502690 | 714742403|
 | GraphCut |     186624039      |  272899924   |394046967 |560601151|
 
+#### Timings for vt2010.mtx (found in testdata folder) with Scotch, C++ implementation of Jet Partitioner and GraphCut (time in ms)
+| Implementation            | 32 Parts | 64 Parts | 128 Parts | 256 Parts |
+|:--------------------------|:--------:|:--------:|:---------:|:---------:|
+| Jet Partitioner (C++)     |  78.79   |  83.75   |   85.33   |  101.76   |
+| Scotch                    |  173.73  |  192.91  |  194.42   |  169.74   |
+| GraphCut                  |  56.99   |  62.84   |   75.07   |   94.37   |
+
 #### Edgecut for ky2010.mtx (found in testdata folder) with METIS, Scotch and GraphCut (lower is better)
 | Tool     |     32 parts      |   64 parts |  128 parts | 256 parts |
 |:---------|:-----------------:|-----------:|-----------:|----------:|
 | METIS    |     387942358     |  560798915 | 810820476  | UNDEFINED |
 | Scotch   |         505188488          |  757842671 |  1088839987 | 1548009204 |
 | GraphCut |     372310884    |           550338848 |   788332918 | 1136228362 |
+
+#### Timings for vt2010.mtx (found in testdata folder) with Scotch, C++ implementation of Jet Partitioner and GraphCut (time in ms)
+| Implementation        | 32 Parts | 64 Parts | 128 Parts | 256 Parts |
+|:----------------------|:--------:|:--------:|:---------:|:---------:|
+| Jet Partitioner (C++) |  78.79   |  83.75   |   85.33   |  101.76   |
+| Scotch                |  249.90  |  310.85  |  370.96   |  401.43   |
+| GraphCut              |  56.99   |  62.84   |   75.07   |   94.37   |
 
 ## References
 - Horowitz, Ellis and Sahni, Sartaj, 1974. Computing partitions with applications to the knapsack problem. *J. ACM*, 21(2):277–292.
